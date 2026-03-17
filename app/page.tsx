@@ -27,7 +27,7 @@ function Label({ children }: { children: React.ReactNode }) {
 
 function SectionHeading({ children, className = '' }: { children: React.ReactNode; className?: string }) {
   return (
-    <h2 className={`font-heading font-semibold tracking-tight text-foreground ${className}`}>
+    <h2 className={`font-marketing font-semibold tracking-tight text-foreground ${className}`}>
       {children}
     </h2>
   )
@@ -43,7 +43,7 @@ function Navbar() {
           <div className="h-6 w-6 rounded-md bg-primary flex items-center justify-center shrink-0">
             <Navigation className="h-3.5 w-3.5 text-primary-foreground" />
           </div>
-          <span className="font-heading font-semibold text-[15px] tracking-tight">Northline</span>
+          <span className="font-semibold text-[15px] tracking-tight">Northline</span>
         </Link>
 
         <nav className="hidden md:flex items-center gap-7">
@@ -84,7 +84,7 @@ function Hero() {
         </div>
 
         {/* Headline */}
-        <h1 className="font-heading font-semibold tracking-tight text-4xl md:text-5xl lg:text-[3.5rem] leading-[1.08] mb-6">
+        <h1 className="font-marketing font-semibold tracking-tight text-4xl md:text-5xl lg:text-[3.5rem] leading-[1.08] mb-6">
           Know your numbers.<br className="hidden sm:block" /> Stay on course.
         </h1>
 
@@ -215,7 +215,7 @@ function CoreValues() {
               <div className="h-8 w-8 rounded-lg bg-primary/10 flex items-center justify-center mb-4">
                 <Icon className="h-4 w-4 text-primary" />
               </div>
-              <h3 className="font-heading font-semibold text-[15px] mb-2 leading-snug">{question}</h3>
+              <h3 className="font-semibold text-[15px] mb-2 leading-snug">{question}</h3>
               <p className="text-sm text-muted-foreground leading-relaxed">{body}</p>
             </div>
           ))}
@@ -276,7 +276,7 @@ function Features() {
               <div className="h-7 w-7 rounded-md bg-primary/10 flex items-center justify-center mb-3.5">
                 <Icon className="h-3.5 w-3.5 text-primary" />
               </div>
-              <h3 className="font-heading font-semibold text-[14px] mb-1.5">{title}</h3>
+              <h3 className="font-semibold text-[14px] mb-1.5">{title}</h3>
               <p className="text-sm text-muted-foreground leading-relaxed">{body}</p>
             </div>
           ))}
@@ -325,12 +325,12 @@ function HowItWorks() {
           {steps.map(({ icon: Icon, title, body }, i) => (
             <div key={i} className="relative">
               <div className="flex items-center gap-3 mb-3.5">
-                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary text-primary-foreground text-xs font-semibold font-heading shrink-0">
+                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary text-primary-foreground text-xs font-semibold shrink-0">
                   {i + 1}
                 </div>
                 <div className="h-px flex-1 bg-border lg:hidden" />
               </div>
-              <h3 className="font-heading font-semibold text-[15px] mb-1.5">{title}</h3>
+              <h3 className="font-semibold text-[15px] mb-1.5">{title}</h3>
               <p className="text-sm text-muted-foreground leading-relaxed">{body}</p>
             </div>
           ))}
@@ -349,7 +349,7 @@ function Differentiation() {
         <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-sidebar-primary mb-3">
           Why Northline
         </p>
-        <h2 className="font-heading font-semibold tracking-tight text-2xl md:text-3xl text-sidebar-accent-foreground mb-6 leading-snug">
+        <h2 className="font-marketing font-semibold tracking-tight text-2xl md:text-3xl text-sidebar-accent-foreground mb-6 leading-snug">
           Not a bloated restaurant suite.<br className="hidden sm:block" /> Not just another dashboard.
         </h2>
         <div className="space-y-4 text-sidebar-foreground/75 leading-relaxed text-[15px]">
@@ -422,7 +422,7 @@ function Pricing() {
         </p>
         <div className="rounded-xl border border-border bg-background p-8 mb-6">
           <p className="text-[11px] font-semibold uppercase tracking-[0.1em] text-muted-foreground mb-2">Starting from</p>
-          <p className="font-heading font-semibold text-4xl tracking-tight mb-1">£49</p>
+          <p className="font-semibold text-4xl tracking-tight mb-1 nums">£49</p>
           <p className="text-sm text-muted-foreground mb-6">per location / month</p>
           <p className="text-sm text-muted-foreground leading-relaxed">
             Clear value, simple setup, and no need to replace your existing systems on day one.
@@ -466,7 +466,7 @@ function FinalCTA() {
   return (
     <section className="py-24 bg-sidebar text-sidebar-foreground">
       <div className="max-w-2xl mx-auto px-6 text-center">
-        <h2 className="font-heading font-semibold tracking-tight text-3xl md:text-4xl text-sidebar-accent-foreground mb-5 leading-tight">
+        <h2 className="font-marketing font-semibold tracking-tight text-3xl md:text-4xl text-sidebar-accent-foreground mb-5 leading-tight">
           Know your numbers.<br /> Stay on course.
         </h2>
         <p className="text-sidebar-foreground/70 leading-relaxed mb-9 text-[15px]">
@@ -509,7 +509,7 @@ function Footer() {
               <div className="h-5 w-5 rounded-md bg-primary flex items-center justify-center shrink-0">
                 <Navigation className="h-3 w-3 text-primary-foreground" />
               </div>
-              <span className="font-heading font-semibold text-sm tracking-tight">Northline</span>
+              <span className="font-semibold text-sm tracking-tight">Northline</span>
             </div>
             <p className="text-[11px] text-muted-foreground/60 uppercase tracking-wider mb-1">Northline for Restaurants</p>
             <p className="text-xs text-muted-foreground leading-relaxed">Know your numbers. Stay on course.</p>
