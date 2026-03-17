@@ -141,8 +141,11 @@ function DropStep({
         )}
       >
         <Upload className="h-10 w-10 mx-auto text-muted-foreground mb-4" />
-        <p className="text-sm font-medium">Drop your file here, or click to browse</p>
-        <p className="text-xs text-muted-foreground mt-1">Supports .csv and .xlsx files</p>
+        <p className="text-sm font-medium mb-3">Drop your file here, or</p>
+        <span className="inline-flex items-center gap-1.5 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground pointer-events-none">
+          Choose file
+        </span>
+        <p className="text-xs text-muted-foreground mt-4">Supports .csv and .xlsx files</p>
       </div>
 
       <input
@@ -249,7 +252,7 @@ function PreviewStep({
           <ArrowLeft className="h-4 w-4" /> Back
         </Button>
         <Button onClick={onNext} disabled={!datasetType}>
-          Map columns <ArrowRight className="h-4 w-4" />
+          Continue <ArrowRight className="h-4 w-4" />
         </Button>
       </div>
     </div>
@@ -463,9 +466,7 @@ function ConfirmStep({
           onClick={onImport}
           disabled={importing || validation.validCount === 0}
         >
-          {importing
-            ? 'Importing…'
-            : `Import ${validation.validCount.toLocaleString()} rows`}
+          {importing ? 'Importing…' : 'Import data'}
         </Button>
       </div>
     </div>

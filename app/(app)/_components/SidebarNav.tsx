@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { LayoutDashboard, Upload, FolderOpen } from 'lucide-react'
+import { LayoutDashboard, Upload, FolderOpen, ShieldCheck } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 const NAV_ITEMS = [
@@ -11,12 +11,21 @@ const NAV_ITEMS = [
   { href: '/uploads', icon: FolderOpen, label: 'My files' },
 ]
 
-export function SidebarNav() {
+interface SidebarNavProps {
+  isSuperAdmin?: boolean
+}
+
+export function SidebarNav({ isSuperAdmin }: SidebarNavProps) {
   const pathname = usePathname()
+
+  const items = [
+    ...NAV_ITEMS,
+    ...(isSuperAdmin ? [{ href: '/admin', icon: ShieldCheck, label: 'Admin' }] : []),
+  ]
 
   return (
     <nav className="px-3 py-3 space-y-0.5">
-      {NAV_ITEMS.map(({ href, icon: Icon, label }) => {
+      {items.map(({ href, icon: Icon, label }) => {
         const active = pathname === href || (href !== '/dashboard' && pathname.startsWith(href))
         return (
           <Link

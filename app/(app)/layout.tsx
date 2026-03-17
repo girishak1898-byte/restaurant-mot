@@ -5,6 +5,7 @@ import { createClient } from '@/lib/supabase/server'
 import { signOut } from '@/lib/actions/auth'
 import { SidebarNav } from './_components/SidebarNav'
 import { NMark } from '@/components/brand/mark'
+import { NotificationsBell } from '@/components/notifications-bell'
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const supabase = await createClient()
@@ -26,13 +27,29 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   const { data: org } = await supabase
     .from('organizations')
-    .select('name, mode')
+    .select('name, mode, plan')
     .eq('id', membership.organization_id)
     .single()
+
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('is_super_admin')
+    .eq('id', user.id)
+    .single()
+
+  const { data: notifications } = await supabase
+    .from('notifications')
+    .select('id, type, title, message, read, created_at')
+    .eq('user_id', user.id)
+    .order('created_at', { ascending: false })
+    .limit(20)
 
   const displayName = user.user_metadata?.full_name || user.email || 'User'
   const modeLabel =
     org?.mode === 'restaurant' ? 'Northline for Restaurants' : org?.mode ? org.mode : 'Northline'
+
+  const isSuperAdmin = profile?.is_super_admin ?? false
+  const isPremium = org?.plan === 'premium'
 
   return (
     <div className="flex h-screen overflow-hidden bg-background">
@@ -54,11 +71,29 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           </div>
         </Link>
 
+        {/* Plan badge */}
+        <div className="px-3.5 pt-3 pb-1">
+          <span
+            className={
+              isPremium
+                ? 'inline-flex items-center gap-1 rounded-md bg-primary/10 border border-primary/20 px-2 py-0.5 text-[10px] font-semibold text-primary uppercase tracking-wider'
+                : 'inline-flex items-center gap-1 rounded-md bg-muted border border-border px-2 py-0.5 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider'
+            }
+          >
+            {isPremium ? 'Premium' : 'Free plan'}
+          </span>
+        </div>
+
         {/* Nav links */}
-        <SidebarNav />
+        <SidebarNav isSuperAdmin={isSuperAdmin} />
 
         {/* Spacer */}
         <div className="flex-1" />
+
+        {/* Notifications */}
+        <div className="px-3 pb-1">
+          <NotificationsBell notifications={notifications ?? []} userId={user.id} />
+        </div>
 
         {/* User + sign out */}
         <div className="border-t border-sidebar-border px-3 py-3 space-y-0.5">

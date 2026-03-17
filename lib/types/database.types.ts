@@ -17,6 +17,7 @@ export type Database = {
           id: string
           full_name: string | null
           avatar_url: string | null
+          is_super_admin: boolean
           created_at: string
           updated_at: string
         }
@@ -24,12 +25,14 @@ export type Database = {
           id: string
           full_name?: string | null
           avatar_url?: string | null
+          is_super_admin?: boolean
           created_at?: string
           updated_at?: string
         }
         Update: {
           full_name?: string | null
           avatar_url?: string | null
+          is_super_admin?: boolean
           updated_at?: string
         }
         Relationships: []
@@ -40,6 +43,7 @@ export type Database = {
           name: string
           slug: string
           mode: 'restaurant' | 'property'
+          plan: 'free' | 'premium'
           created_at: string
           updated_at: string
         }
@@ -48,6 +52,7 @@ export type Database = {
           name: string
           slug: string
           mode?: 'restaurant' | 'property'
+          plan?: 'free' | 'premium'
           created_at?: string
           updated_at?: string
         }
@@ -55,6 +60,7 @@ export type Database = {
           name?: string
           slug?: string
           mode?: 'restaurant' | 'property'
+          plan?: 'free' | 'premium'
           updated_at?: string
         }
         Relationships: []
@@ -186,6 +192,68 @@ export type Database = {
           mapping_name?: string
           column_map?: Json
           updated_at?: string
+        }
+        Relationships: []
+      }
+      upgrade_requests: {
+        Row: {
+          id: string
+          organization_id: string
+          user_id: string
+          requested_plan: 'premium'
+          status: 'pending' | 'approved' | 'rejected'
+          notes: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          organization_id: string
+          user_id: string
+          requested_plan?: 'premium'
+          status?: 'pending' | 'approved' | 'rejected'
+          notes?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          status?: 'pending' | 'approved' | 'rejected'
+          notes?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: 'upgrade_requests_organization_id_fkey'
+            columns: ['organization_id']
+            isOneToOne: false
+            referencedRelation: 'organizations'
+            referencedColumns: ['id']
+          },
+        ]
+      }
+      notifications: {
+        Row: {
+          id: string
+          organization_id: string | null
+          user_id: string
+          type: string
+          title: string
+          message: string
+          read: boolean
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          organization_id?: string | null
+          user_id: string
+          type: string
+          title: string
+          message: string
+          read?: boolean
+          created_at?: string
+        }
+        Update: {
+          read?: boolean
         }
         Relationships: []
       }
@@ -333,6 +401,10 @@ export type Database = {
       user_org_role: {
         Args: { org_id: string }
         Returns: string
+      }
+      is_super_admin: {
+        Args: Record<PropertyKey, never>
+        Returns: boolean
       }
     }
     Enums: {

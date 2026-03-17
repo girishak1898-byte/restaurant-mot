@@ -15,6 +15,7 @@ import { ChannelMarginTable } from './_components/ChannelMarginTable'
 import { DataHealthPanel } from './_components/DataHealthPanel'
 import { OwnerSummaryCard } from './_components/OwnerSummaryCard'
 import { Button } from '@/components/ui/button'
+import { PremiumGate } from '@/components/premium-gate'
 import { cn } from '@/lib/utils'
 
 // ── Layout primitives ──────────────────────────────────────────────────────────
@@ -251,7 +252,16 @@ export default async function DashboardPage() {
 
   if (!membership) redirect('/onboarding')
 
-  const data = await getDashboardData(membership.organization_id)
+  const { data: org } = await supabase
+    .from('organizations')
+    .select('plan')
+    .eq('id', membership.organization_id)
+    .single()
+
+  const isPremium = org?.plan === 'premium'
+  const orgId = membership.organization_id
+
+  const data = await getDashboardData(orgId)
   const {
     overview,
     byMonth,
@@ -287,12 +297,23 @@ export default async function DashboardPage() {
           <h1 className="text-2xl font-semibold tracking-tight font-heading">Dashboard</h1>
           <p className="text-muted-foreground text-sm mt-0.5">Your restaurant, at a glance</p>
         </div>
-        <Button asChild variant="outline" size="sm">
-          <Link href="/upload">
-            <Upload className="h-3.5 w-3.5" />
-            Import data
-          </Link>
-        </Button>
+        <div className="flex items-center gap-2">
+          {!isPremium && (
+            <Link
+              href="/pricing"
+              className="inline-flex items-center gap-1.5 rounded-md border border-primary/30 bg-primary/5 px-3 py-1.5 text-xs font-medium text-primary hover:bg-primary/10 transition-colors"
+            >
+              Upgrade to Premium
+              <ArrowUpRight className="h-3.5 w-3.5" />
+            </Link>
+          )}
+          <Button asChild variant="outline" size="sm">
+            <Link href="/upload">
+              <Upload className="h-3.5 w-3.5" />
+              Import data
+            </Link>
+          </Button>
+        </div>
       </div>
 
       {!hasData ? (
@@ -301,13 +322,29 @@ export default async function DashboardPage() {
         <>
           {/* ── Owner Summary ──────────────────────────────────────── */}
           <div className="mb-8 animate-fade-up">
-            <OwnerSummaryCard data={data} />
+            <PremiumGate
+              isPremium={isPremium}
+              headline="Unlock your weekly owner summary"
+              body="See what improved, what worsened, and the one action to focus on next."
+              orgId={orgId}
+              minHeight="180px"
+            >
+              <OwnerSummaryCard data={data} />
+            </PremiumGate>
           </div>
 
           {/* ── Operator Alerts ────────────────────────────────────── */}
           {alerts.length > 0 && (
             <Section title="Alerts">
-              <AlertsPanel alerts={alerts} />
+              <PremiumGate
+                isPremium={isPremium}
+                headline="Unlock action-focused insights"
+                body="Get clearer weekly signals on margin pressure, labour risk, discounting, and what needs attention next."
+                orgId={orgId}
+                minHeight="120px"
+              >
+                <AlertsPanel alerts={alerts} />
+              </PremiumGate>
             </Section>
           )}
 
@@ -376,68 +413,84 @@ export default async function DashboardPage() {
 
           {/* ── Prime Cost ─────────────────────────────────────────── */}
           <Section title="Prime cost">
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3.5 mb-6">
-              {primePct !== null && primePct > 0 && (
-                <MetricCard
-                  label="Prime Cost % (latest)"
-                  value={formatPct(primePct)}
-                  sub="Food + labour as % of revenue"
-                  highlight={primePct > 65 ? 'critical' : primePct > 60 ? 'warning' : 'success'}
-                />
-              )}
-              {latestPrime && latestPrime.food_cost > 0 && (
-                <MetricCard
-                  label="Food Cost (latest)"
-                  value={formatCurrency(latestPrime.food_cost)}
-                  sub={
-                    latestPrime.net_revenue > 0
-                      ? `${formatPct((latestPrime.food_cost / latestPrime.net_revenue) * 100)} of revenue`
-                      : undefined
-                  }
-                />
-              )}
-              {latestPrime && latestPrime.labour_cost > 0 && (
-                <MetricCard
-                  label="Labour Cost (latest)"
-                  value={formatCurrency(latestPrime.labour_cost)}
-                  sub={
-                    latestPrime.net_revenue > 0
-                      ? `${formatPct((latestPrime.labour_cost / latestPrime.net_revenue) * 100)} of revenue`
-                      : undefined
-                  }
-                />
-              )}
-              {latestPrime && latestPrime.prime_cost > 0 && (
-                <MetricCard
-                  label="Combined Prime Cost"
-                  value={formatCurrency(latestPrime.prime_cost)}
-                  sub={latestPrime.month}
-                />
-              )}
-            </div>
-            <ChartCard title="Prime cost % trend" subtitle="Target: below 60%">
-              <PrimeCostTrendChart data={primeCostByMonth} />
-            </ChartCard>
+            <PremiumGate
+              isPremium={isPremium}
+              headline="Unlock full prime cost visibility"
+              body="See food cost, labour cost, and prime cost together so you can spot pressure before it hits margin."
+              orgId={orgId}
+              minHeight="300px"
+            >
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-3.5 mb-6">
+                {primePct !== null && primePct > 0 && (
+                  <MetricCard
+                    label="Prime Cost % (latest)"
+                    value={formatPct(primePct)}
+                    sub="Food + labour as % of revenue"
+                    highlight={primePct > 65 ? 'critical' : primePct > 60 ? 'warning' : 'success'}
+                  />
+                )}
+                {latestPrime && latestPrime.food_cost > 0 && (
+                  <MetricCard
+                    label="Food Cost (latest)"
+                    value={formatCurrency(latestPrime.food_cost)}
+                    sub={
+                      latestPrime.net_revenue > 0
+                        ? `${formatPct((latestPrime.food_cost / latestPrime.net_revenue) * 100)} of revenue`
+                        : undefined
+                    }
+                  />
+                )}
+                {latestPrime && latestPrime.labour_cost > 0 && (
+                  <MetricCard
+                    label="Labour Cost (latest)"
+                    value={formatCurrency(latestPrime.labour_cost)}
+                    sub={
+                      latestPrime.net_revenue > 0
+                        ? `${formatPct((latestPrime.labour_cost / latestPrime.net_revenue) * 100)} of revenue`
+                        : undefined
+                    }
+                  />
+                )}
+                {latestPrime && latestPrime.prime_cost > 0 && (
+                  <MetricCard
+                    label="Combined Prime Cost"
+                    value={formatCurrency(latestPrime.prime_cost)}
+                    sub={latestPrime.month}
+                  />
+                )}
+              </div>
+              <ChartCard title="Prime cost % trend" subtitle="Target: below 60%">
+                <PrimeCostTrendChart data={primeCostByMonth} />
+              </ChartCard>
+            </PremiumGate>
           </Section>
 
           {/* ── Margin Leak ────────────────────────────────────────── */}
           <Section title="Margin leak">
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 mb-5">
-              <ChartCard title="Channel margin breakdown">
-                <ChannelMarginTable data={channelMargin} />
-              </ChartCard>
-              <ChartCard title="Gross margin by category">
-                <MarginByCategoryChart data={marginByCategory} />
-              </ChartCard>
-            </div>
-            {overview && (
-              <ChartCard
-                title="Popular items with low margin"
-                subtitle="Items driving ≥2% of revenue but below 55% gross margin"
-              >
-                <HighRevLowMarginTable items={topByMargin} totalNet={overview.total_net} />
-              </ChartCard>
-            )}
+            <PremiumGate
+              isPremium={isPremium}
+              headline="Unlock margin leak analysis"
+              body="See which items, categories, and channels drive revenue but weaken profit."
+              orgId={orgId}
+              minHeight="320px"
+            >
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 mb-5">
+                <ChartCard title="Channel margin breakdown">
+                  <ChannelMarginTable data={channelMargin} />
+                </ChartCard>
+                <ChartCard title="Gross margin by category">
+                  <MarginByCategoryChart data={marginByCategory} />
+                </ChartCard>
+              </div>
+              {overview && (
+                <ChartCard
+                  title="Popular items with low margin"
+                  subtitle="Items driving ≥2% of revenue but below 55% gross margin"
+                >
+                  <HighRevLowMarginTable items={topByMargin} totalNet={overview.total_net} />
+                </ChartCard>
+              )}
+            </PremiumGate>
           </Section>
 
           {/* ── Menu Performance ───────────────────────────────────── */}
@@ -460,36 +513,44 @@ export default async function DashboardPage() {
           {/* ── Labour ─────────────────────────────────────────────── */}
           {hasLabour && (
             <Section title="Labour">
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5 mb-5">
-                <MetricCard
-                  label="Total Labour Cost"
-                  value={formatCurrency(labourOverview.total_labour)}
-                />
-                <MetricCard
-                  label="Total Hours Worked"
-                  value={formatNumber(Math.round(labourOverview.total_hours))}
-                  sub="across all shifts"
-                />
-                {labourPct !== null && (
+              <PremiumGate
+                isPremium={isPremium}
+                headline="Unlock labour performance insights"
+                body="Track labour cost against revenue and see where efficiency may be slipping."
+                orgId={orgId}
+                minHeight="260px"
+              >
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5 mb-5">
                   <MetricCard
-                    label="Labour Cost %"
-                    value={formatPct(labourPct)}
-                    sub="of net revenue"
-                    highlight={
-                      labourPct > 35 ? 'warning' : labourPct >= 25 && labourPct <= 35 ? 'success' : undefined
-                    }
+                    label="Total Labour Cost"
+                    value={formatCurrency(labourOverview.total_labour)}
                   />
-                )}
-              </div>
-              <ChartCard title="Labour cost by outlet">
-                <HBarChart
-                  data={labourByOutlet}
-                  valueKey="labour_cost"
-                  labelKey="outlet_name"
-                  color="#6D28D9"
-                  emptyMessage="No outlet breakdown available. Make sure your labour data includes an outlet name column."
-                />
-              </ChartCard>
+                  <MetricCard
+                    label="Total Hours Worked"
+                    value={formatNumber(Math.round(labourOverview.total_hours))}
+                    sub="across all shifts"
+                  />
+                  {labourPct !== null && (
+                    <MetricCard
+                      label="Labour Cost %"
+                      value={formatPct(labourPct)}
+                      sub="of net revenue"
+                      highlight={
+                        labourPct > 35 ? 'warning' : labourPct >= 25 && labourPct <= 35 ? 'success' : undefined
+                      }
+                    />
+                  )}
+                </div>
+                <ChartCard title="Labour cost by outlet">
+                  <HBarChart
+                    data={labourByOutlet}
+                    valueKey="labour_cost"
+                    labelKey="outlet_name"
+                    color="#6D28D9"
+                    emptyMessage="No outlet breakdown available. Make sure your labour data includes an outlet name column."
+                  />
+                </ChartCard>
+              </PremiumGate>
             </Section>
           )}
 
