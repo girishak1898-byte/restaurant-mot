@@ -1,62 +1,94 @@
-import { AlertTriangle, CheckCircle2, Info, XCircle } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { Alert } from '@/lib/data/dashboard'
 
-const CONFIG = {
+// ── Visual config ─────────────────────────────────────────────────────────────
+
+const LEVEL_CONFIG = {
   critical: {
-    icon: XCircle,
-    wrapper: 'border-red-200/60 bg-red-50/50',
-    iconClass: 'text-red-500',
-    titleClass: 'text-red-900',
-    bodyClass: 'text-red-800/80',
-    actionClass: 'text-red-700/60',
+    accent: 'border-l-red-500',
+    bg: 'bg-red-50/20',
+    categoryClass: 'text-red-600',
+    actionClass: 'text-red-600/80',
+    levelLabel: 'Critical',
+    levelClass: 'text-red-400',
   },
   warning: {
-    icon: AlertTriangle,
-    wrapper: 'border-amber-200/60 bg-amber-50/50',
-    iconClass: 'text-amber-500',
-    titleClass: 'text-amber-900',
-    bodyClass: 'text-amber-800/80',
-    actionClass: 'text-amber-700/60',
+    accent: 'border-l-amber-400',
+    bg: 'bg-amber-50/20',
+    categoryClass: 'text-amber-700',
+    actionClass: 'text-amber-700/80',
+    levelLabel: 'Attention',
+    levelClass: 'text-amber-400',
   },
   info: {
-    icon: Info,
-    wrapper: 'border-blue-200/50 bg-blue-50/40',
-    iconClass: 'text-blue-500',
-    titleClass: 'text-blue-900',
-    bodyClass: 'text-blue-800/80',
-    actionClass: 'text-blue-700/60',
+    accent: 'border-l-primary/40',
+    bg: 'bg-primary/[0.025]',
+    categoryClass: 'text-primary',
+    actionClass: 'text-primary/80',
+    levelLabel: 'Note',
+    levelClass: 'text-primary/40',
   },
   success: {
-    icon: CheckCircle2,
-    wrapper: 'border-emerald-200/50 bg-emerald-50/40',
-    iconClass: 'text-emerald-600',
-    titleClass: 'text-emerald-900',
-    bodyClass: 'text-emerald-800/80',
-    actionClass: 'text-emerald-700/60',
+    accent: 'border-l-emerald-500',
+    bg: 'bg-emerald-50/15',
+    categoryClass: 'text-emerald-700',
+    actionClass: 'text-emerald-700/80',
+    levelLabel: 'On track',
+    levelClass: 'text-emerald-400',
   },
 }
+
+const PRIORITY: Record<string, number> = { critical: 0, warning: 1, info: 2, success: 3 }
+const MAX_VISIBLE = 5
+
+// ── Component ─────────────────────────────────────────────────────────────────
 
 export function AlertsPanel({ alerts }: { alerts: Alert[] }) {
   if (alerts.length === 0) return null
 
-  const order = { critical: 0, warning: 1, info: 2, success: 3 }
-  const sorted = [...alerts].sort((a, b) => order[a.level] - order[b.level])
+  const sorted = [...alerts]
+    .sort((a, b) => PRIORITY[a.level] - PRIORITY[b.level])
+    .slice(0, MAX_VISIBLE)
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
       {sorted.map((alert, i) => {
-        const { icon: Icon, wrapper, iconClass, titleClass, bodyClass, actionClass } = CONFIG[alert.level]
+        const { accent, bg, categoryClass, actionClass, levelLabel, levelClass } = LEVEL_CONFIG[alert.level]
         return (
-          <div key={i} className={cn('flex gap-3 rounded-xl border p-4', wrapper)}>
-            <Icon className={cn('h-4 w-4 mt-0.5 shrink-0', iconClass)} />
-            <div className="min-w-0">
-              <p className={cn('text-[13px] font-semibold leading-snug', titleClass)}>{alert.title}</p>
-              <p className={cn('text-[13px] mt-1 leading-relaxed', bodyClass)}>{alert.body}</p>
-              {alert.action && (
-                <p className={cn('text-xs mt-1.5 font-medium', actionClass)}>→ {alert.action}</p>
-              )}
+          <div
+            key={i}
+            className={cn(
+              'rounded-xl border border-border border-l-[3px] p-4 shadow-sm',
+              accent,
+              bg
+            )}
+          >
+            {/* Header row: category + severity */}
+            <div className="flex items-center justify-between gap-2 mb-2">
+              <span className={cn('text-[10px] font-semibold uppercase tracking-[0.1em]', categoryClass)}>
+                {alert.category}
+              </span>
+              <span className={cn('text-[10px] font-medium', levelClass)}>
+                {levelLabel}
+              </span>
             </div>
+
+            {/* Headline */}
+            <p className="text-[13px] font-semibold text-foreground leading-snug mb-1.5">
+              {alert.title}
+            </p>
+
+            {/* Supporting sentence */}
+            <p className="text-[12px] text-muted-foreground leading-relaxed">
+              {alert.body}
+            </p>
+
+            {/* Next action */}
+            {alert.action && (
+              <p className={cn('text-[11px] font-medium mt-2.5', actionClass)}>
+                → {alert.action}
+              </p>
+            )}
           </div>
         )
       })}

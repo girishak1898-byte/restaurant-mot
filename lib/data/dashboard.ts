@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
+import { formatCurrency, formatPct } from '@/lib/format'
 
 // ── Return types (mirror the SQL RETURNS TABLE definitions) ──────────────────
 
@@ -143,10 +144,13 @@ export async function getDashboardData(orgId: string): Promise<DashboardData> {
   }
 }
 
-// ── Operator alerts (rules engine) ────────────────────────────────────────────
+// ── Operator insights (rules engine) ─────────────────────────────────────────
+
+export type InsightCategory = 'Labour' | 'Margin' | 'Channel' | 'Prime cost' | 'Revenue'
 
 export interface Alert {
   level: 'critical' | 'warning' | 'info' | 'success'
+  category: InsightCategory
   title: string
   body: string
   action?: string
@@ -154,7 +158,7 @@ export interface Alert {
 
 export function generateAlerts(data: DashboardData): Alert[] {
   const alerts: Alert[] = []
-  const { overview, byChannel, byOutlet, labourOverview, marginByCategory, primeCostByMonth, channelMargin, topByMargin } = data
+  const { overview, byChannel, labourOverview, marginByCategory, primeCostByMonth, channelMargin, topByMargin } = data
 
   if (!overview || overview.total_net === 0) return alerts
 
@@ -165,40 +169,47 @@ export function generateAlerts(data: DashboardData): Alert[] {
     if (pct > 65) {
       alerts.push({
         level: 'critical',
-        title: `Prime cost at ${pct}% — critically high`,
-        body: `Food + labour cost exceeded 65% of revenue in ${latestPrime.month}. The industry target is below 60%. Immediate review of food waste and scheduling is needed.`,
-        action: 'Review prime cost trend below',
+        category: 'Prime cost',
+        title: 'Prime cost is critically high',
+        body: `At ${formatPct(pct)}, food and labour are taking over two-thirds of revenue in ${latestPrime.month}. The target is below 60%. This level erodes profit quickly.`,
+        action: 'Review staffing levels and food waste this week',
       })
     } else if (pct > 60) {
       alerts.push({
         level: 'warning',
-        title: `Prime cost at ${pct}% — above target`,
-        body: `Combined food and labour cost is above the 60% benchmark in ${latestPrime.month}. Check for waste, over-staffing, or underpriced menu items.`,
-        action: 'Review prime cost trend below',
+        category: 'Prime cost',
+        title: 'Prime cost is above target',
+        body: `Combined food and labour cost reached ${formatPct(pct)} in ${latestPrime.month} — ${(pct - 60).toFixed(1)}pp above the 60% benchmark. Small overruns compound quickly.`,
+        action: 'Check food waste logs and next week\'s rota',
       })
     } else {
       alerts.push({
         level: 'success',
-        title: `Prime cost healthy at ${pct}%`,
-        body: `Food + labour cost is within the target range (below 60%) for ${latestPrime.month}. Keep monitoring monthly to catch drift early.`,
+        category: 'Prime cost',
+        title: 'Prime cost is on track',
+        body: `At ${formatPct(pct)} for ${latestPrime.month}, food and labour costs are within the healthy range. Keep importing data monthly to catch any drift early.`,
       })
     }
   }
 
   // ── Labour cost % ───────────────────────────────────────────────
-  if (labourOverview && labourOverview.total_labour > 0) {
+  if (labourOverview && labourOverview.total_labour > 0 && overview.total_net > 0) {
     const pct = (labourOverview.total_labour / overview.total_net) * 100
     if (pct > 35) {
       alerts.push({
         level: 'warning',
-        title: `Labour at ${pct.toFixed(1)}% of revenue — above benchmark`,
-        body: `The typical restaurant range is 25–35%. Consider reviewing rotas, peak-hour coverage, or split-shift scheduling.`,
+        category: 'Labour',
+        title: 'Labour is above target',
+        body: `Labour cost is ${formatPct(pct)} of net revenue — ${formatCurrency(labourOverview.total_labour)} against ${formatCurrency(overview.total_net)}. The target range is 25–35%.`,
+        action: 'Review rotas and peak-hour scheduling',
       })
     } else if (pct < 20) {
       alerts.push({
         level: 'info',
-        title: `Labour at ${pct.toFixed(1)}% — unusually low`,
-        body: `This is below the typical 25–35% range. Double-check that all labour data has been imported.`,
+        category: 'Labour',
+        title: 'Labour looks unusually low',
+        body: `At ${formatPct(pct)} of revenue, labour costs are below the typical 25–35% range. Check that all shift data has been imported before drawing conclusions.`,
+        action: 'Import missing labour shifts',
       })
     }
   }
@@ -209,19 +220,23 @@ export function generateAlerts(data: DashboardData): Alert[] {
     if (discountPct > 20) {
       alerts.push({
         level: 'critical',
-        title: `Discount rate at ${discountPct.toFixed(1)}% — damaging margins`,
-        body: `More than 1 in 5 pounds of gross revenue is being discounted away. Audit your promotions, vouchers, and staff discount policy.`,
+        category: 'Margin',
+        title: 'Discounts are damaging margin',
+        body: `${formatPct(discountPct)} of gross revenue — ${formatCurrency(overview.total_discount)} — is being discounted away. At this level, promotions are likely destroying more value than they create.`,
+        action: 'Audit active promotions and staff discount policy',
       })
     } else if (discountPct > 12) {
       alerts.push({
         level: 'warning',
-        title: `Discount rate at ${discountPct.toFixed(1)}% — worth reviewing`,
-        body: `Discounts are above 12% of gross revenue. Review your active promotions to ensure they're driving incremental covers, not just eroding margin.`,
+        category: 'Margin',
+        title: 'Discounts are eating into margin',
+        body: `Discount rate is ${formatPct(discountPct)} of gross revenue (${formatCurrency(overview.total_discount)}). Check whether your promotions are driving new covers or simply reducing margin on existing ones.`,
+        action: 'Review active promotions',
       })
     }
   }
 
-  // ── Channel margin leak ─────────────────────────────────────────
+  // ── Channel margin gap ─────────────────────────────────────────
   const channelsWithCost = channelMargin.filter((c) => c.food_cost > 0)
   if (channelsWithCost.length > 1) {
     const sorted = [...channelsWithCost].sort((a, b) => a.margin_pct - b.margin_pct)
@@ -231,47 +246,52 @@ export function generateAlerts(data: DashboardData): Alert[] {
     if (gap > 15) {
       alerts.push({
         level: 'warning',
-        title: `${worst.channel} margin is ${gap.toFixed(0)}pp below ${best.channel}`,
-        body: `${worst.channel} has a ${worst.margin_pct}% gross margin vs ${best.margin_pct}% on ${best.channel}. Delivery platform fees or channel-specific discounting may explain the gap.`,
-        action: 'See Margin Leak section below',
+        category: 'Channel',
+        title: `${worst.channel} is driving revenue, not profit`,
+        body: `${worst.channel} runs at ${formatPct(worst.margin_pct)} gross margin vs ${formatPct(best.margin_pct)} on ${best.channel} — a ${gap.toFixed(0)}pp gap. Platform fees or channel-specific discounting are likely the cause.`,
+        action: 'Review channel margin breakdown below',
       })
     }
   }
 
   // ── Low-margin high-revenue items ───────────────────────────────
   const itemsWithCost = topByMargin.filter((i) => i.margin_pct > 0 && i.revenue > 0)
-  const highRevThreshold = overview.total_net * 0.03 // items > 3% of revenue
+  const highRevThreshold = overview.total_net * 0.03
   const leakers = itemsWithCost.filter((i) => i.revenue >= highRevThreshold && i.margin_pct < 50)
   if (leakers.length > 0) {
     const item = leakers[0]
     alerts.push({
       level: 'warning',
-      title: `"${item.item_name}" sells well but has low margin`,
-      body: `At ${item.margin_pct.toFixed(1)}% gross margin, this popular item is dragging overall profitability. Consider a price review or ingredient substitution.`,
-      action: 'See Menu Performance below',
+      category: 'Margin',
+      title: `"${item.item_name}" sells well but hurts margin`,
+      body: `This item generates strong volume but only at ${formatPct(item.margin_pct)} gross margin. A small price increase or ingredient swap could recover meaningful profit.`,
+      action: 'Review menu performance below',
     })
   }
 
-  // ── Top channel / outlet ────────────────────────────────────────
+  // ── Channel concentration / top channel ────────────────────────
   if (byChannel.length > 0) {
     const top = byChannel[0]
-    const pct = ((top.revenue / overview.total_net) * 100).toFixed(0)
+    const topPct = ((top.revenue / overview.total_net) * 100).toFixed(0)
     if (byChannel.length === 1) {
       alerts.push({
         level: 'info',
-        title: `All revenue from ${top.channel}`,
-        body: `100% of sales come through ${top.channel}. Diversifying channels can reduce platform dependency and risk.`,
+        category: 'Channel',
+        title: `All revenue comes through ${top.channel}`,
+        body: `With no other active channels, any fee change or volume drop on ${top.channel} has a direct impact on total revenue. Diversification reduces that risk.`,
+        action: 'Consider adding a second sales channel',
       })
     } else {
       alerts.push({
         level: 'info',
-        title: `${top.channel} drives ${pct}% of revenue`,
-        body: `Your strongest channel is ${top.channel}. ${byChannel.length > 1 ? `Second is ${byChannel[1].channel}.` : ''}`,
+        category: 'Channel',
+        title: `${top.channel} is your strongest channel`,
+        body: `${top.channel} accounts for ${topPct}% of net revenue, followed by ${byChannel[1].channel}. A healthy channel mix reduces dependency risk.`,
       })
     }
   }
 
-  // ── Margin category insights ────────────────────────────────────
+  // ── Category margin insights ────────────────────────────────────
   const withCostData = marginByCategory.filter((c) => c.food_cost > 0)
   if (withCostData.length > 0) {
     const best = [...withCostData].sort((a, b) => b.margin_pct - a.margin_pct)[0]
@@ -279,15 +299,18 @@ export function generateAlerts(data: DashboardData): Alert[] {
 
     alerts.push({
       level: 'success',
-      title: `${best.category} is your most profitable category`,
-      body: `${best.margin_pct.toFixed(1)}% gross margin. Push this category in upsells and menu placement.`,
+      category: 'Margin',
+      title: `${best.category} has your best margin`,
+      body: `At ${formatPct(best.margin_pct)} gross margin, this is your most profitable category. Prioritise it in upsells and front-of-menu placement.`,
     })
 
     if (worst.category !== best.category && worst.margin_pct < 50) {
       alerts.push({
         level: 'info',
-        title: `${worst.category} has the lowest margin at ${worst.margin_pct.toFixed(1)}%`,
-        body: `Review portion sizes, food costs, or pricing for this category to bring it above 50%.`,
+        category: 'Margin',
+        title: `${worst.category} is below margin target`,
+        body: `${formatPct(worst.margin_pct)} gross margin is below the 50% target for this category. Review pricing, portion sizes, or supplier costs to find where value is leaking.`,
+        action: 'Review category margins below',
       })
     }
   }
