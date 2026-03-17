@@ -6,6 +6,7 @@ import { signOut } from '@/lib/actions/auth'
 import { SidebarNav } from './_components/SidebarNav'
 import { NMark } from '@/components/brand/mark'
 import { NotificationsBell } from '@/components/notifications-bell'
+import { PremiumUnlockModal } from '@/components/premium-unlock-modal'
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const supabase = await createClient()
@@ -50,6 +51,14 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   const isSuperAdmin = profile?.is_super_admin ?? false
   const isPremium = org?.plan === 'premium'
+
+  // Unread plan_approved notifications trigger the unlock celebration modal.
+  // Once the modal is dismissed it marks them read, so they never show again.
+  const unlockNotificationIds = isPremium
+    ? (notifications ?? [])
+        .filter((n) => n.type === 'plan_approved' && !n.read)
+        .map((n) => n.id)
+    : []
 
   return (
     <div className="flex h-screen overflow-hidden bg-background">
@@ -125,6 +134,11 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
       {/* ── Main content ─────────────────────────────────────── */}
       <main className="flex-1 overflow-auto">{children}</main>
+
+      {/* Premium unlock celebration — shown once after approval */}
+      {unlockNotificationIds.length > 0 && (
+        <PremiumUnlockModal notificationIds={unlockNotificationIds} />
+      )}
     </div>
   )
 }
