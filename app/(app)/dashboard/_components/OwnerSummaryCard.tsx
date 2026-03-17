@@ -16,7 +16,6 @@ function deriveSummary(data: DashboardData): {
 } | null {
   const { byMonth, primeCostByMonth, overview, labourOverview, channelMargin } = data
 
-  // Need at least two months of revenue data to compare
   if (byMonth.length < 2) return null
 
   const curr = byMonth.at(-1)!
@@ -102,7 +101,7 @@ function deriveSummary(data: DashboardData): {
     }
   }
 
-  // Channel margin gap (only if food cost data is present)
+  // Channel margin gap
   const channelsWithCost = channelMargin.filter((c) => c.food_cost > 0)
   if (channelsWithCost.length > 1) {
     const sorted = [...channelsWithCost].sort((a, b) => a.margin_pct - b.margin_pct)
@@ -117,11 +116,11 @@ function deriveSummary(data: DashboardData): {
     }
   }
 
-  // Recommended next action — pick the most pressing issue
+  // Recommended next action
   let action: string
   if (labourPct !== null && labourPct > 40) {
     action =
-      'Labour is your biggest cost risk. Review next week\'s rota and look for any shifts that can be cut or reorganised.'
+      'Labour is your biggest cost risk. Review next week\'s rota and look for shifts that can be cut or reorganised.'
   } else if (discountPct !== null && discountPct > 18) {
     action =
       'Your discount rate is high. Audit your active promotions, staff discounts, and delivery-platform deals this week.'
@@ -148,7 +147,6 @@ function deriveSummary(data: DashboardData): {
       'Upload the latest week\'s sales and labour data to get a clearer picture of where costs are heading.'
   }
 
-  // If nothing meaningful to compare, don't show the card
   if (improved.length === 0 && worsened.length === 0) return null
 
   return { improved, worsened, action, period }
@@ -161,66 +159,70 @@ export function OwnerSummaryCard({ data }: { data: DashboardData }) {
   const { improved, worsened, action, period } = summary
 
   return (
-    <div className="rounded-xl border bg-card p-6 shadow-sm">
-      <div className="flex items-start justify-between mb-4">
+    <div className="rounded-xl border border-border bg-card shadow-sm overflow-hidden">
+      {/* Header strip */}
+      <div className="flex items-center justify-between px-5 py-3.5 border-b border-border">
         <div>
-          <h3 className="text-sm font-semibold">Owner Summary</h3>
-          <p className="text-xs text-muted-foreground mt-0.5">Latest period: {period}</p>
+          <h3 className="text-[13px] font-semibold">Owner Summary</h3>
+          <p className="text-[11px] text-muted-foreground mt-0.5">Latest period: {period}</p>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-5">
-        {/* What improved */}
-        <div>
-          <div className="flex items-center gap-1.5 mb-2">
-            <TrendingUp className="h-3.5 w-3.5 text-green-600" />
-            <p className="text-xs font-semibold uppercase tracking-wider text-green-700">
-              What improved
-            </p>
+      {/* Body */}
+      <div className="p-5">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 mb-5">
+          {/* What improved */}
+          <div>
+            <div className="flex items-center gap-1.5 mb-2.5">
+              <TrendingUp className="h-3.5 w-3.5 text-emerald-600" />
+              <p className="text-[10px] font-semibold uppercase tracking-[0.1em] text-emerald-700">
+                What improved
+              </p>
+            </div>
+            {improved.length > 0 ? (
+              <ul className="space-y-2">
+                {improved.map((line, i) => (
+                  <li key={i} className="flex items-start gap-2 text-[13px] text-emerald-900/90">
+                    <span className="mt-1.5 h-1.5 w-1.5 rounded-full bg-emerald-500 shrink-0" />
+                    {line.text}
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-[13px] text-muted-foreground">Nothing notable yet — keep uploading data.</p>
+            )}
           </div>
-          {improved.length > 0 ? (
-            <ul className="space-y-1.5">
-              {improved.map((line, i) => (
-                <li key={i} className="flex items-start gap-2 text-sm text-green-800">
-                  <span className="mt-1 h-1.5 w-1.5 rounded-full bg-green-500 shrink-0" />
-                  {line.text}
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p className="text-sm text-muted-foreground">Nothing notable yet — keep uploading data.</p>
-          )}
+
+          {/* What worsened */}
+          <div>
+            <div className="flex items-center gap-1.5 mb-2.5">
+              <TrendingDown className="h-3.5 w-3.5 text-amber-600" />
+              <p className="text-[10px] font-semibold uppercase tracking-[0.1em] text-amber-700">
+                Watch out for
+              </p>
+            </div>
+            {worsened.length > 0 ? (
+              <ul className="space-y-2">
+                {worsened.map((line, i) => (
+                  <li key={i} className="flex items-start gap-2 text-[13px] text-amber-900/90">
+                    <span className="mt-1.5 h-1.5 w-1.5 rounded-full bg-amber-500 shrink-0" />
+                    {line.text}
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-[13px] text-muted-foreground">No obvious warning signs this period.</p>
+            )}
+          </div>
         </div>
 
-        {/* What worsened */}
-        <div>
-          <div className="flex items-center gap-1.5 mb-2">
-            <TrendingDown className="h-3.5 w-3.5 text-amber-600" />
-            <p className="text-xs font-semibold uppercase tracking-wider text-amber-700">
-              Watch out for
-            </p>
+        {/* Recommended action */}
+        <div className="rounded-lg border border-primary/15 bg-primary/5 p-3.5 flex gap-2.5">
+          <Lightbulb className="h-4 w-4 text-primary mt-0.5 shrink-0" />
+          <div>
+            <p className="text-[11px] font-semibold text-primary mb-1 uppercase tracking-wide">Recommended action</p>
+            <p className="text-[13px] text-foreground/80 leading-relaxed">{action}</p>
           </div>
-          {worsened.length > 0 ? (
-            <ul className="space-y-1.5">
-              {worsened.map((line, i) => (
-                <li key={i} className="flex items-start gap-2 text-sm text-amber-900">
-                  <span className="mt-1 h-1.5 w-1.5 rounded-full bg-amber-500 shrink-0" />
-                  {line.text}
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p className="text-sm text-muted-foreground">No obvious warning signs this period.</p>
-          )}
-        </div>
-      </div>
-
-      {/* Recommended action */}
-      <div className={cn('rounded-lg border border-blue-200 bg-blue-50 p-3 flex gap-2.5')}>
-        <Lightbulb className="h-4 w-4 text-blue-600 mt-0.5 shrink-0" />
-        <div>
-          <p className="text-xs font-semibold text-blue-800 mb-0.5">Recommended next action</p>
-          <p className="text-sm text-blue-900">{action}</p>
         </div>
       </div>
     </div>

@@ -38,22 +38,22 @@ const STATUS_CONFIG: Record<string, { label: string; icon: React.ReactNode; clas
   done: {
     label: 'Imported',
     icon: <CheckCircle2 className="h-3.5 w-3.5" />,
-    className: 'text-green-700 bg-green-50 border-green-200',
+    className: 'text-emerald-700 bg-emerald-50/60 border-emerald-200/70',
   },
   processing: {
     label: 'Processing',
     icon: <Loader2 className="h-3.5 w-3.5 animate-spin" />,
-    className: 'text-blue-700 bg-blue-50 border-blue-200',
+    className: 'text-primary bg-primary/8 border-primary/20',
   },
   pending: {
     label: 'Pending',
     icon: <Clock className="h-3.5 w-3.5" />,
-    className: 'text-muted-foreground bg-muted border-border',
+    className: 'text-muted-foreground bg-muted/50 border-border',
   },
   error: {
     label: 'Failed',
     icon: <XCircle className="h-3.5 w-3.5" />,
-    className: 'text-red-700 bg-red-50 border-red-200',
+    className: 'text-red-700 bg-red-50/60 border-red-200/70',
   },
 }
 
@@ -313,7 +313,7 @@ export function UploadsTable({ initialRows }: { initialRows: UploadRow[] }) {
           <select
             value={typeFilter}
             onChange={(e) => setTypeFilter(e.target.value)}
-            className="text-sm border rounded-md px-2.5 py-1.5 bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+            className="text-sm border border-border rounded-md px-2.5 py-1.5 bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring/50 transition-colors hover:border-ring/50"
           >
             <option value="all">All data types</option>
             {uniqueTypes.map((t) => (
@@ -324,7 +324,7 @@ export function UploadsTable({ initialRows }: { initialRows: UploadRow[] }) {
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
-            className="text-sm border rounded-md px-2.5 py-1.5 bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+            className="text-sm border border-border rounded-md px-2.5 py-1.5 bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring/50 transition-colors hover:border-ring/50"
           >
             <option value="all">All statuses</option>
             <option value="done">Imported</option>
@@ -375,17 +375,18 @@ export function UploadsTable({ initialRows }: { initialRows: UploadRow[] }) {
       {/* Table */}
       {filtered.length > 0 && (
         <div className="rounded-xl border overflow-hidden">
+          <div className="overflow-x-auto">
           <table className="min-w-full">
-            <thead className="bg-muted/40">
+            <thead className="bg-muted/30 border-b border-border">
               <tr>
                 <th className="w-8 pl-4" />
-                <th className="py-2.5 pr-4 text-left text-xs font-medium text-muted-foreground">File name</th>
-                <th className="py-2.5 pr-4 text-left text-xs font-medium text-muted-foreground">Data type</th>
-                <th className="py-2.5 pr-4 text-left text-xs font-medium text-muted-foreground whitespace-nowrap">Upload date</th>
-                <th className="py-2.5 pr-4 text-left text-xs font-medium text-muted-foreground">Status</th>
-                <th className="py-2.5 pr-4 text-right text-xs font-medium text-muted-foreground">Rows</th>
-                <th className="py-2.5 pr-4 text-right text-xs font-medium text-muted-foreground">Size</th>
-                <th className="py-2.5 pr-4 text-right text-xs font-medium text-muted-foreground">Actions</th>
+                <th className="py-3 pr-4 text-left text-[11px] font-medium uppercase tracking-wider text-muted-foreground">File name</th>
+                <th className="py-3 pr-4 text-left text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Data type</th>
+                <th className="py-3 pr-4 text-left text-[11px] font-medium uppercase tracking-wider text-muted-foreground whitespace-nowrap">Uploaded</th>
+                <th className="py-3 pr-4 text-left text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Status</th>
+                <th className="py-3 pr-4 text-right text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Rows</th>
+                <th className="py-3 pr-4 text-right text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Size</th>
+                <th className="py-3 pr-4 text-right text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Actions</th>
               </tr>
             </thead>
             <tbody className="bg-card">
@@ -394,6 +395,7 @@ export function UploadsTable({ initialRows }: { initialRows: UploadRow[] }) {
               ))}
             </tbody>
           </table>
+          </div>
         </div>
       )}
     </div>

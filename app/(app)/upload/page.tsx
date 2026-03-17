@@ -217,7 +217,7 @@ function PreviewStep({
 
       {/* Data preview */}
       <div>
-        <p className="text-sm font-medium mb-2 text-muted-foreground">Preview (first 5 rows)</p>
+        <p className="text-[11px] font-medium mb-2 text-muted-foreground uppercase tracking-wider">Preview (first 5 rows)</p>
         <div className="overflow-x-auto rounded-lg border text-xs">
           <table className="min-w-full divide-y divide-border">
             <thead className="bg-muted/50">
@@ -246,10 +246,10 @@ function PreviewStep({
 
       <div className="flex justify-between pt-2">
         <Button variant="outline" onClick={onBack}>
-          <ArrowLeft className="h-4 w-4 mr-1" /> Back
+          <ArrowLeft className="h-4 w-4" /> Back
         </Button>
         <Button onClick={onNext} disabled={!datasetType}>
-          Map columns <ArrowRight className="h-4 w-4 ml-1" />
+          Map columns <ArrowRight className="h-4 w-4" />
         </Button>
       </div>
     </div>
@@ -293,12 +293,13 @@ function MappingStep({
       </div>
 
       <div className="rounded-xl border overflow-hidden">
+        <div className="overflow-x-auto">
         <table className="min-w-full divide-y divide-border text-sm">
-          <thead className="bg-muted/50">
+          <thead className="bg-muted/30 border-b border-border">
             <tr>
-              <th className="px-4 py-3 text-left font-medium text-muted-foreground w-1/3">Field</th>
-              <th className="px-4 py-3 text-left font-medium text-muted-foreground w-1/3">Your column</th>
-              <th className="px-4 py-3 text-left font-medium text-muted-foreground w-1/3">Sample value</th>
+              <th className="px-4 py-3 text-left text-[11px] font-medium uppercase tracking-wider text-muted-foreground w-1/3">Field</th>
+              <th className="px-4 py-3 text-left text-[11px] font-medium uppercase tracking-wider text-muted-foreground w-1/3">Your column</th>
+              <th className="px-4 py-3 text-left text-[11px] font-medium uppercase tracking-wider text-muted-foreground w-1/3">Sample value</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-border">
@@ -323,8 +324,8 @@ function MappingStep({
                       value={selectedCol}
                       onChange={(e) => setField(field.key, e.target.value)}
                       className={cn(
-                        'w-full rounded-md border bg-background px-3 py-1.5 text-sm',
-                        'focus:outline-none focus:ring-2 focus:ring-primary/50',
+                        'w-full rounded-md border border-border bg-background px-3 py-1.5 text-sm transition-colors',
+                        'hover:border-ring/50 focus:outline-none focus:ring-2 focus:ring-ring/50',
                         field.required && !selectedCol && 'border-destructive/50 bg-destructive/5'
                       )}
                     >
@@ -343,6 +344,7 @@ function MappingStep({
             })}
           </tbody>
         </table>
+        </div>
       </div>
 
       {!allRequiredMapped && (
@@ -357,10 +359,10 @@ function MappingStep({
 
       <div className="flex justify-between">
         <Button variant="outline" onClick={onBack}>
-          <ArrowLeft className="h-4 w-4 mr-1" /> Back
+          <ArrowLeft className="h-4 w-4" /> Back
         </Button>
         <Button onClick={onNext} disabled={!allRequiredMapped}>
-          Review import <ArrowRight className="h-4 w-4 ml-1" />
+          Review import <ArrowRight className="h-4 w-4" />
         </Button>
       </div>
     </div>
@@ -455,7 +457,7 @@ function ConfirmStep({
 
       <div className="flex justify-between">
         <Button variant="outline" onClick={onBack} disabled={importing}>
-          <ArrowLeft className="h-4 w-4 mr-1" /> Back
+          <ArrowLeft className="h-4 w-4" /> Back
         </Button>
         <Button
           onClick={onImport}
@@ -612,17 +614,17 @@ export default function UploadPage() {
   // ── Render ─────────────────────────────────────────────────────────────────
 
   return (
-    <div className="p-8 max-w-3xl mx-auto">
+    <div className="px-8 py-7 max-w-3xl mx-auto">
       <div className="mb-6">
-        <h1 className="text-2xl font-bold tracking-tight">Import data</h1>
-        <p className="text-muted-foreground mt-1">
+        <h1 className="text-xl font-semibold tracking-tight">Import data</h1>
+        <p className="text-muted-foreground text-sm mt-0.5">
           Upload a CSV or Excel file — we&apos;ll walk you through the rest.
         </p>
       </div>
 
       {step !== 'done' && <StepIndicator current={step} />}
 
-      <div className="rounded-2xl border bg-card p-6 shadow-sm">
+      <div className="rounded-xl border bg-card p-6 shadow-sm">
         {step === 'drop' && !parsing && (
           <DropStep
             onFile={handleFile}

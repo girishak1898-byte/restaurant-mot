@@ -3,7 +3,6 @@ import Link from 'next/link'
 import { ChefHat, LogOut } from 'lucide-react'
 import { createClient } from '@/lib/supabase/server'
 import { signOut } from '@/lib/actions/auth'
-import { Separator } from '@/components/ui/separator'
 import { SidebarNav } from './_components/SidebarNav'
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
@@ -37,35 +36,41 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   return (
     <div className="flex h-screen overflow-hidden bg-background">
       {/* ── Sidebar ─────────────────────────────────────────── */}
-      <aside className="w-56 shrink-0 border-r flex flex-col">
+      <aside className="w-56 shrink-0 flex flex-col bg-sidebar border-r border-sidebar-border">
         {/* Brand / org header */}
-        <Link href="/dashboard" className="flex items-center gap-2.5 px-3 py-3 border-b hover:bg-muted/40 transition-colors">
-          <div className="flex h-7 w-7 items-center justify-center rounded-md bg-primary text-primary-foreground shrink-0">
+        <Link
+          href="/dashboard"
+          className="flex items-center gap-2.5 px-3.5 py-3.5 border-b border-sidebar-border hover:bg-sidebar-accent/50 transition-colors group"
+        >
+          <div className="flex h-7 w-7 items-center justify-center rounded-md bg-primary text-primary-foreground shrink-0 transition-opacity group-hover:opacity-90">
             <ChefHat className="h-4 w-4" />
           </div>
           <div className="flex-1 min-w-0">
-            <p className="text-sm font-semibold truncate leading-tight">{org?.name ?? 'My Restaurant'}</p>
-            <p className="text-[11px] text-muted-foreground">{modeLabel}</p>
+            <p className="text-sm font-semibold text-sidebar-accent-foreground truncate leading-tight">
+              {org?.name ?? 'My Restaurant'}
+            </p>
+            <p className="text-[10px] text-sidebar-foreground/50 tracking-wide uppercase">{modeLabel}</p>
           </div>
         </Link>
 
-        {/* Nav links — client component for active state */}
+        {/* Nav links */}
         <SidebarNav />
 
-        <Separator />
+        {/* Spacer */}
+        <div className="flex-1" />
 
         {/* User + sign out */}
-        <div className="px-2 py-3 space-y-0.5">
-          <div className="px-3 py-2">
-            <p className="text-sm font-medium truncate">{displayName}</p>
-            <p className="text-xs text-muted-foreground truncate">{user.email}</p>
+        <div className="border-t border-sidebar-border px-3 py-3 space-y-0.5">
+          <div className="px-2 py-2 mb-1">
+            <p className="text-[13px] font-medium text-sidebar-accent-foreground truncate">{displayName}</p>
+            <p className="text-[11px] text-sidebar-foreground/50 truncate mt-0.5">{user.email}</p>
           </div>
           <form action={signOut}>
             <button
               type="submit"
-              className="flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-colors"
+              className="flex w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-[13px] text-sidebar-foreground/60 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-colors"
             >
-              <LogOut className="h-4 w-4 shrink-0" />
+              <LogOut className="h-3.5 w-3.5 shrink-0" />
               Sign out
             </button>
           </form>

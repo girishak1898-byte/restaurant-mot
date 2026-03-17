@@ -5,7 +5,7 @@ import type { ChannelMargin } from '@/lib/data/dashboard'
 export function ChannelMarginTable({ data }: { data: ChannelMargin[] }) {
   if (data.length === 0) {
     return (
-      <p className="text-sm text-muted-foreground py-6 text-center">
+      <p className="text-sm text-muted-foreground py-6 text-center leading-relaxed">
         No channel data available. Make sure your sales data includes a channel column.
       </p>
     )
@@ -17,39 +17,39 @@ export function ChannelMarginTable({ data }: { data: ChannelMargin[] }) {
     <div className="overflow-x-auto">
       <table className="min-w-full text-sm">
         <thead>
-          <tr className="border-b">
-            <th className="pb-2 text-left text-xs font-medium text-muted-foreground">Channel</th>
-            <th className="pb-2 text-right text-xs font-medium text-muted-foreground">Net Revenue</th>
-            <th className="pb-2 text-right text-xs font-medium text-muted-foreground">Discount %</th>
+          <tr className="border-b border-border">
+            <th className="pb-2.5 text-left text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Channel</th>
+            <th className="pb-2.5 text-right text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Net Revenue</th>
+            <th className="pb-2.5 text-right text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Discount</th>
             {hasFoodCost && (
-              <th className="pb-2 text-right text-xs font-medium text-muted-foreground">Gross Margin</th>
+              <th className="pb-2.5 text-right text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Margin</th>
             )}
           </tr>
         </thead>
         <tbody className="divide-y divide-border">
           {data.map((row, i) => (
-            <tr key={i} className="hover:bg-muted/30">
-              <td className="py-2 pr-4 font-medium">{row.channel}</td>
-              <td className="py-2 text-right text-muted-foreground">{formatCurrency(row.net_revenue)}</td>
-              <td className="py-2 text-right">
+            <tr key={i} className="hover:bg-muted/40 transition-colors">
+              <td className="py-2.5 pr-4 font-medium">{row.channel}</td>
+              <td className="py-2.5 text-right text-muted-foreground nums">{formatCurrency(row.net_revenue)}</td>
+              <td className="py-2.5 text-right">
                 <span
                   className={cn(
-                    'font-semibold',
+                    'font-semibold nums',
                     row.discount_pct > 20 && 'text-red-600',
                     row.discount_pct > 12 && row.discount_pct <= 20 && 'text-amber-600',
-                    row.discount_pct <= 12 && 'text-green-600'
+                    row.discount_pct <= 12 && 'text-emerald-600'
                   )}
                 >
                   {formatPct(row.discount_pct)}
                 </span>
               </td>
               {hasFoodCost && (
-                <td className="py-2 text-right">
+                <td className="py-2.5 text-right">
                   {row.food_cost > 0 ? (
                     <span
                       className={cn(
-                        'font-semibold',
-                        row.margin_pct >= 65 && 'text-green-600',
+                        'font-semibold nums',
+                        row.margin_pct >= 65 && 'text-emerald-600',
                         row.margin_pct < 50 && 'text-red-600',
                         row.margin_pct >= 50 && row.margin_pct < 65 && 'text-amber-600'
                       )}

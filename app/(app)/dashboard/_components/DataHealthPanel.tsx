@@ -88,7 +88,7 @@ function getHealthItems(data: DashboardData): HealthItem[] {
 }
 
 const STATUS_CONFIG = {
-  ok: { icon: CheckCircle2, color: 'text-green-600' },
+  ok: { icon: CheckCircle2, color: 'text-emerald-600' },
   warn: { icon: AlertTriangle, color: 'text-amber-500' },
   missing: { icon: XCircle, color: 'text-red-400' },
 }
@@ -115,7 +115,7 @@ export function DataHealthPanel({ data }: { data: DashboardData }) {
         <div className="pt-2 border-t">
           <Link
             href="/upload"
-            className="text-xs font-medium text-blue-600 hover:text-blue-700 underline underline-offset-2"
+            className="text-xs font-medium text-primary hover:text-primary/80 underline underline-offset-2"
           >
             Import missing data →
           </Link>

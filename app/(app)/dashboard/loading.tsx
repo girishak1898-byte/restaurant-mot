@@ -1,54 +1,76 @@
+function Skel({ className }: { className?: string }) {
+  return <div className={`skeleton ${className ?? ''}`} />
+}
+
 export default function DashboardLoading() {
   return (
-    <div className="p-8 max-w-7xl mx-auto animate-pulse">
+    <div className="px-8 py-7 max-w-7xl mx-auto">
       {/* Header */}
-      <div className="flex items-center justify-between mb-8">
+      <div className="flex items-start justify-between mb-8">
         <div className="space-y-2">
-          <div className="h-7 w-32 bg-muted rounded" />
-          <div className="h-4 w-52 bg-muted rounded" />
+          <Skel className="h-6 w-28" />
+          <Skel className="h-4 w-44" />
         </div>
-        <div className="h-8 w-28 bg-muted rounded-lg" />
+        <Skel className="h-8 w-28 rounded-lg" />
       </div>
 
       {/* Owner summary card */}
-      <div className="h-40 bg-muted rounded-xl mb-10" />
+      <Skel className="h-44 rounded-xl mb-8" />
 
-      {/* Section divider + alerts */}
-      <div className="h-4 w-16 bg-muted rounded mb-5" />
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-10">
-        <div className="h-24 bg-muted rounded-xl" />
-        <div className="h-24 bg-muted rounded-xl" />
-        <div className="h-24 bg-muted rounded-xl" />
-        <div className="h-24 bg-muted rounded-xl" />
+      {/* Section label */}
+      <div className="flex items-center gap-3 mb-5">
+        <Skel className="h-3 w-14 rounded" />
+        <Skel className="flex-1 h-px rounded" />
       </div>
 
-      {/* Revenue section */}
-      <div className="h-4 w-20 bg-muted rounded mb-5" />
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+      {/* Alerts */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 mb-12">
+        <Skel className="h-20 rounded-xl" />
+        <Skel className="h-20 rounded-xl" />
+      </div>
+
+      {/* Revenue section label */}
+      <div className="flex items-center gap-3 mb-5">
+        <Skel className="h-3 w-16 rounded" />
+        <Skel className="flex-1 h-px rounded" />
+      </div>
+
+      {/* Metric cards */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3.5 mb-6">
         {[...Array(4)].map((_, i) => (
-          <div key={i} className="h-24 bg-muted rounded-xl" />
+          <Skel key={i} className="h-24 rounded-xl" />
         ))}
       </div>
-      <div className="h-64 bg-muted rounded-xl mb-6" />
-      <div className="grid grid-cols-2 gap-6 mb-10">
-        <div className="h-52 bg-muted rounded-xl" />
-        <div className="h-52 bg-muted rounded-xl" />
+
+      {/* Revenue bar chart */}
+      <Skel className="h-64 rounded-xl mb-5" />
+
+      {/* Channel / outlet charts */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 mb-12">
+        <Skel className="h-52 rounded-xl" />
+        <Skel className="h-52 rounded-xl" />
       </div>
 
       {/* Prime cost section */}
-      <div className="h-4 w-24 bg-muted rounded mb-5" />
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+      <div className="flex items-center gap-3 mb-5">
+        <Skel className="h-3 w-20 rounded" />
+        <Skel className="flex-1 h-px rounded" />
+      </div>
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3.5 mb-6">
         {[...Array(3)].map((_, i) => (
-          <div key={i} className="h-24 bg-muted rounded-xl" />
+          <Skel key={i} className="h-24 rounded-xl" />
         ))}
       </div>
-      <div className="h-64 bg-muted rounded-xl mb-10" />
+      <Skel className="h-64 rounded-xl mb-12" />
 
       {/* Margin leak section */}
-      <div className="h-4 w-24 bg-muted rounded mb-5" />
-      <div className="grid grid-cols-2 gap-6 mb-10">
-        <div className="h-52 bg-muted rounded-xl" />
-        <div className="h-52 bg-muted rounded-xl" />
+      <div className="flex items-center gap-3 mb-5">
+        <Skel className="h-3 w-24 rounded" />
+        <Skel className="flex-1 h-px rounded" />
+      </div>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+        <Skel className="h-52 rounded-xl" />
+        <Skel className="h-52 rounded-xl" />
       </div>
     </div>
   )
