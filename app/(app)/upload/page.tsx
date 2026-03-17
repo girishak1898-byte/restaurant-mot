@@ -118,7 +118,7 @@ function DropStep({
   return (
     <div className="space-y-4">
       <div>
-        <h2 className="text-lg font-semibold">Upload your file</h2>
+        <h2 className="text-xl font-semibold font-heading">Upload your file</h2>
         <p className="text-sm text-muted-foreground mt-0.5">
           Drag and drop a CSV or Excel file to get started.
         </p>
@@ -185,7 +185,7 @@ function PreviewStep({
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-lg font-semibold">What type of data is this?</h2>
+        <h2 className="text-xl font-semibold font-heading">What type of data is this?</h2>
         <p className="text-sm text-muted-foreground mt-0.5">
           <span className="font-medium">{file.name}</span> — {parsed.totalRows.toLocaleString()} rows detected
         </p>
@@ -286,7 +286,7 @@ function MappingStep({
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-lg font-semibold">Map your columns</h2>
+        <h2 className="text-xl font-semibold font-heading">Map your columns</h2>
         <p className="text-sm text-muted-foreground mt-0.5">
           Tell us which column in your file matches each field. We&apos;ve pre-filled what we could.
         </p>
@@ -391,7 +391,7 @@ function ConfirmStep({
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-lg font-semibold">Ready to import</h2>
+        <h2 className="text-xl font-semibold font-heading">Ready to import</h2>
         <p className="text-sm text-muted-foreground mt-0.5">
           Importing into <span className="font-medium">{DATASET_LABELS[datasetType]}</span>
         </p>
@@ -489,7 +489,7 @@ function DoneStep({
         <CheckCircle2 className="h-8 w-8 text-primary" />
       </div>
       <div>
-        <h2 className="text-xl font-semibold">Import complete</h2>
+        <h2 className="text-2xl font-semibold font-heading">Import complete</h2>
         <p className="text-muted-foreground mt-1">
           {imported.toLocaleString()} {imported === 1 ? 'row' : 'rows'} imported successfully.
           {failed > 0 && (
@@ -616,7 +616,7 @@ export default function UploadPage() {
   return (
     <div className="px-8 py-7 max-w-3xl mx-auto">
       <div className="mb-6">
-        <h1 className="text-xl font-semibold tracking-tight">Import data</h1>
+        <h1 className="text-2xl font-semibold tracking-tight font-heading">Import data</h1>
         <p className="text-muted-foreground text-sm mt-0.5">
           Upload a CSV or Excel file — we&apos;ll walk you through the rest.
         </p>

@@ -31,7 +31,7 @@ export default function SignupPage() {
   return (
     <div className="w-full max-w-sm">
       <div className="text-center mb-6">
-        <h1 className="text-[15px] font-semibold tracking-tight">Northline</h1>
+        <h1 className="text-2xl font-semibold tracking-tight font-heading">Northline</h1>
         <p className="text-sm text-muted-foreground mt-1">Know your numbers. Stay on course.</p>
       </div>
 

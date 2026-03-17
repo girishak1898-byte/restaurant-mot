@@ -219,7 +219,7 @@ function EmptyState() {
       <div className="h-14 w-14 rounded-full bg-primary/10 border border-primary/15 flex items-center justify-center mb-5">
         <Upload className="h-6 w-6 text-primary" />
       </div>
-      <h2 className="text-base font-semibold tracking-tight">No data imported yet</h2>
+      <h2 className="text-lg font-semibold tracking-tight font-heading">No data imported yet</h2>
       <p className="text-muted-foreground text-sm mt-2 max-w-xs leading-relaxed">
         Upload your sales, menu, or labour data to start seeing your restaurant analytics.
       </p>
@@ -284,7 +284,7 @@ export default async function DashboardPage() {
       {/* ── Header ─────────────────────────────────────────────── */}
       <div className="flex items-start justify-between mb-8">
         <div>
-          <h1 className="text-xl font-semibold tracking-tight">Dashboard</h1>
+          <h1 className="text-2xl font-semibold tracking-tight font-heading">Dashboard</h1>
           <p className="text-muted-foreground text-sm mt-0.5">Your restaurant, at a glance</p>
         </div>
         <Button asChild variant="outline" size="sm">

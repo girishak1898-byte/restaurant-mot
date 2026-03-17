@@ -56,7 +56,7 @@ export default async function UploadsPage() {
     <div className="px-8 py-7 max-w-6xl mx-auto">
       <div className="flex items-start justify-between mb-8">
         <div>
-          <h1 className="text-xl font-semibold tracking-tight">My files</h1>
+          <h1 className="text-2xl font-semibold tracking-tight font-heading">My files</h1>
           <p className="text-muted-foreground text-sm mt-0.5">
             {rows.length === 0
               ? 'No files uploaded yet.'
