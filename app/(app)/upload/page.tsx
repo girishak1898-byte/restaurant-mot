@@ -10,7 +10,7 @@ import { parseFile, parseSheet, type ParseResult } from '@/lib/upload/parse'
 import { inspectWorkbook, type SheetInspection } from '@/lib/upload/workbook'
 import { validateRows, type ValidationResult } from '@/lib/upload/validate'
 import { autoMap, DATASET_DESCRIPTIONS, DATASET_FIELDS, DATASET_LABELS, type DatasetType } from '@/lib/upload/schemas'
-import { saveUpload, finaliseWorkbookUpload } from '@/lib/actions/upload'
+import { createWorkbookUpload, saveUpload, finaliseWorkbookUpload } from '@/lib/actions/upload'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Alert, AlertDescription } from '@/components/ui/alert'
@@ -1248,49 +1248,72 @@ export default function UploadPage() {
     setImporting(true)
     setError(null)
 
-    const fileType = getFileType(file)!
-    const results: SheetResult[] = []
-    let uploadId: string | null = workbookUploadId
+    try {
+      const fileType = getFileType(file)!
 
-    for (const sheet of sheetQueue) {
-      const type = sheet.suggestedType!
-      const m = sheetMappings[sheet.name] ?? {}
-      const v = validateRows(sheet.parsed.rows, m, type)
-      const validRows = sheet.parsed.rows.filter((_, i) => {
-        const rowNum = i + 2
-        return !v.errors.some((e) => e.row === rowNum)
-      })
-
-      const res = await saveUpload({
+      // Step 1: Create one upload record for the whole workbook upfront.
+      // This ensures every sheet uses the same upload ID regardless of whether
+      // individual sheet imports succeed or fail.
+      const uploadRes = await createWorkbookUpload({
         fileName: file.name,
         fileType,
         fileSizeBytes: file.size,
-        targetTable: type,
-        mapping: m,
-        rows: validRows,
-        sheetName: sheet.name,
-        existingUploadId: uploadId ?? undefined,
       })
 
-      if (!uploadId && res.uploadId) uploadId = res.uploadId
-      results.push({
-        name: sheet.name,
-        datasetType: type,
-        imported: res.imported ?? 0,
-        failed: res.failed ?? 0,
-        error: res.error ?? undefined,
-      })
-    }
+      if (uploadRes.error || !uploadRes.uploadId) {
+        setError(uploadRes.error ?? 'Failed to create upload record.')
+        return
+      }
 
-    if (uploadId) {
+      const uploadId = uploadRes.uploadId
+      const results: SheetResult[] = []
+
+      // Step 2: Import each sheet, always reusing the pre-created upload record.
+      for (const sheet of sheetQueue) {
+        const type = sheet.suggestedType!
+        const m = sheetMappings[sheet.name] ?? {}
+        const v = validateRows(sheet.parsed.rows, m, type)
+        const validRows = sheet.parsed.rows.filter((_, i) => {
+          const rowNum = i + 2
+          return !v.errors.some((e) => e.row === rowNum)
+        })
+
+        const res = await saveUpload({
+          fileName: file.name,
+          fileType,
+          fileSizeBytes: file.size,
+          targetTable: type,
+          mapping: m,
+          rows: validRows,
+          rowsTotal: sheet.parsed.totalRows,
+          sheetName: sheet.name,
+          existingUploadId: uploadId,
+        })
+
+        results.push({
+          name: sheet.name,
+          datasetType: type,
+          imported: res.imported ?? 0,
+          failed: res.failed ?? 0,
+          error: res.error,
+        })
+      }
+
+      // Step 3: Seal the upload record with the final status.
       const anySucceeded = results.some((r) => r.imported > 0)
       await finaliseWorkbookUpload(uploadId, anySucceeded)
-    }
 
-    setSheetResults(results)
-    setWorkbookUploadId(uploadId)
-    setImporting(false)
-    setStep('done')
+      setSheetResults(results)
+      setWorkbookUploadId(uploadId)
+      setStep('done')
+    } catch (err) {
+      // Re-throw Next.js redirect/not-found signals so the router can handle them
+      if (err && typeof err === 'object' && 'digest' in err) throw err
+      setError(err instanceof Error ? err.message : 'Import failed. Please try again.')
+    } finally {
+      // Always clear the loading state — even if an exception was thrown
+      setImporting(false)
+    }
   }
 
   // ── Single-sheet handlers ──────────────────────────────────────────────────

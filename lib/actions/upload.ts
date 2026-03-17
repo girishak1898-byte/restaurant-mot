@@ -4,6 +4,24 @@ import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { DATASET_FIELDS, type DatasetType } from '@/lib/upload/schemas'
 
+// ── Shared auth helper ────────────────────────────────────────────────────────
+
+async function getOrgId(): Promise<{ orgId: string; userId: string } | { error: string }> {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) redirect('/login')
+
+  const { data: membership } = await supabase
+    .from('organization_memberships')
+    .select('organization_id')
+    .eq('user_id', user.id)
+    .limit(1)
+    .single()
+
+  if (!membership) return { error: 'No organization found. Please complete onboarding.' }
+  return { orgId: membership.organization_id, userId: user.id }
+}
+
 // ── Type coercion ────────────────────────────────────────────────────────────
 
 function coerceRow(
@@ -54,6 +72,40 @@ export interface SaveUploadResult {
 const BATCH_SIZE = 500
 const MAX_ROWS = 10_000
 
+/**
+ * Create a single upload record for a multi-sheet workbook.
+ * Call this once before the per-sheet loop, then pass the returned uploadId
+ * as existingUploadId to every saveUpload call.
+ */
+export async function createWorkbookUpload(params: {
+  fileName: string
+  fileType: 'csv' | 'xlsx'
+  fileSizeBytes: number
+}): Promise<SaveUploadResult> {
+  const { fileName, fileType, fileSizeBytes } = params
+  const auth = await getOrgId()
+  if ('error' in auth) return { error: auth.error }
+  const { orgId, userId } = auth
+
+  const supabase = await createClient()
+  const { data: upload, error: uploadError } = await supabase
+    .from('uploads')
+    .insert({
+      organization_id: orgId,
+      uploaded_by: userId,
+      file_name: fileName,
+      storage_path: `${orgId}/${Date.now()}_${fileName}`,
+      file_type: fileType,
+      file_size_bytes: fileSizeBytes,
+      status: 'processing',
+    })
+    .select('id')
+    .single()
+
+  if (uploadError || !upload) return { error: 'Could not create upload record.' }
+  return { uploadId: upload.id }
+}
+
 export async function saveUpload(params: {
   fileName: string
   fileType: 'csv' | 'xlsx'
@@ -61,46 +113,36 @@ export async function saveUpload(params: {
   targetTable: DatasetType
   mapping: Record<string, string>
   rows: Record<string, string>[]
+  /** Actual total rows in the source sheet — used for import_jobs.rows_total */
+  rowsTotal?: number
   /** Sheet name — set for multi-sheet workbook imports */
   sheetName?: string
-  /** Pass the upload record ID from a previous sheet to reuse the same upload record */
+  /** Pass the upload record ID created by createWorkbookUpload to skip creating a new one */
   existingUploadId?: string
 }): Promise<SaveUploadResult> {
-  const { fileName, fileType, fileSizeBytes, targetTable, mapping, rows, sheetName, existingUploadId } = params
+  const { fileName, fileType, fileSizeBytes, targetTable, mapping, rows, rowsTotal, sheetName, existingUploadId } = params
 
   if (rows.length > MAX_ROWS) {
     return { error: `File has ${rows.length.toLocaleString()} rows. Maximum is ${MAX_ROWS.toLocaleString()} per upload.` }
   }
 
+  const auth = await getOrgId()
+  if ('error' in auth) return { error: auth.error }
+  const { orgId, userId } = auth
+
   const supabase = await createClient()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-  if (!user) redirect('/login')
-
-  const { data: membership } = await supabase
-    .from('organization_memberships')
-    .select('organization_id')
-    .eq('user_id', user.id)
-    .limit(1)
-    .single()
-
-  if (!membership) return { error: 'No organization found. Please complete onboarding.' }
-
-  const orgId = membership.organization_id
 
   // ── Create or reuse upload record ───────────────────────────────────────────
   let uploadId: string
 
   if (existingUploadId) {
-    // Multi-sheet workbook: reuse the upload record created for the first sheet
     uploadId = existingUploadId
   } else {
     const { data: upload, error: uploadError } = await supabase
       .from('uploads')
       .insert({
         organization_id: orgId,
-        uploaded_by: user.id,
+        uploaded_by: userId,
         file_name: fileName,
         storage_path: `${orgId}/${Date.now()}_${fileName}`,
         file_type: fileType,
@@ -121,14 +163,17 @@ export async function saveUpload(params: {
       organization_id: orgId,
       upload_id: uploadId,
       target_table: targetTable,
-      rows_total: rows.length,
+      // Use the caller-supplied total rows (e.g. sheet.parsed.totalRows) so the
+      // job reflects the actual sheet size, not just the valid-row subset.
+      rows_total: rowsTotal ?? rows.length,
       status: 'running',
       ...(sheetName ? { sheet_name: sheetName } : {}),
     })
     .select('id')
     .single()
 
-  if (jobError || !job) return { error: 'Could not create import job.' }
+  // Always return uploadId so callers can clean up / finalise even on failure
+  if (jobError || !job) return { error: 'Could not create import job.', uploadId }
 
   // ── Coerce rows and insert in batches ────────────────────────────────────────
   const coercedRows = rows.map((row) => ({
@@ -155,11 +200,14 @@ export async function saveUpload(params: {
     }
   }
 
-  const finalStatus = failed === rows.length ? 'error' : 'done'
+  // A sheet with zero valid rows (all filtered out client-side) is not an error —
+  // it just imported nothing. Only mark as error when rows were sent but all failed.
+  const allFailed = rows.length > 0 && failed === rows.length
+  const finalStatus = allFailed ? 'error' : 'done'
 
   // ── Update records ───────────────────────────────────────────────────────────
   await Promise.all([
-    // Only update the upload status if this is the first (or only) sheet
+    // For single-sheet imports only — multi-sheet callers use finaliseWorkbookUpload
     ...(!existingUploadId
       ? [supabase.from('uploads').update({ status: finalStatus }).eq('id', uploadId)]
       : []),
@@ -171,8 +219,8 @@ export async function saveUpload(params: {
     }).eq('id', job.id),
   ])
 
-  if (failed === rows.length) {
-    return { error: `Import failed: ${errorMessages[0] ?? 'unknown error'}` }
+  if (allFailed) {
+    return { error: `Import failed: ${errorMessages[0] ?? 'unknown error'}`, uploadId }
   }
 
   return { imported, failed, uploadId }

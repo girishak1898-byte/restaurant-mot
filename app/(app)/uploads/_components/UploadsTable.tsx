@@ -38,6 +38,9 @@ const DATASET_LABELS: Record<string, string> = {
   restaurant_sales: 'Sales data',
   restaurant_menu_items: 'Menu items',
   restaurant_labour_shifts: 'Labour shifts',
+  restaurant_purchases: 'Purchases',
+  restaurant_inventory_counts: 'Inventory counts',
+  restaurant_waste_adjustments: 'Waste & adjustments',
 }
 
 const STATUS_CONFIG: Record<string, { label: string; icon: React.ReactNode; className: string }> = {
