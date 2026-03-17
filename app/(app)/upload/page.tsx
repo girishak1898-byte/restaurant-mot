@@ -98,6 +98,14 @@ const NEEDS_REVIEW_TYPE_OPTIONS: { value: DatasetType; label: string }[] = [
 
 // ── Utilities ─────────────────────────────────────────────────────────────────
 
+/** True for Next.js redirect() / notFound() signals — must be re-thrown. */
+function isClientNavigationError(err: unknown): boolean {
+  if (!err || typeof err !== 'object') return false
+  if (!('digest' in err)) return false
+  const digest = String((err as { digest: unknown }).digest)
+  return digest.startsWith('NEXT_REDIRECT') || digest === 'NEXT_NOT_FOUND'
+}
+
 function getFileType(file: File): 'csv' | 'xlsx' | null {
   if (file.name.endsWith('.csv')) return 'csv'
   if (file.name.endsWith('.xlsx') || file.name.endsWith('.xls')) return 'xlsx'
@@ -1252,8 +1260,6 @@ export default function UploadPage() {
       const fileType = getFileType(file)!
 
       // Step 1: Create one upload record for the whole workbook upfront.
-      // This ensures every sheet uses the same upload ID regardless of whether
-      // individual sheet imports succeed or fail.
       const uploadRes = await createWorkbookUpload({
         fileName: file.name,
         fileType,
@@ -1268,7 +1274,7 @@ export default function UploadPage() {
       const uploadId = uploadRes.uploadId
       const results: SheetResult[] = []
 
-      // Step 2: Import each sheet, always reusing the pre-created upload record.
+      // Step 2: Import each sheet independently — one failure never blocks the rest.
       for (const sheet of sheetQueue) {
         const type = sheet.suggestedType!
         const m = sheetMappings[sheet.name] ?? {}
@@ -1278,25 +1284,38 @@ export default function UploadPage() {
           return !v.errors.some((e) => e.row === rowNum)
         })
 
-        const res = await saveUpload({
-          fileName: file.name,
-          fileType,
-          fileSizeBytes: file.size,
-          targetTable: type,
-          mapping: m,
-          rows: validRows,
-          rowsTotal: sheet.parsed.totalRows,
-          sheetName: sheet.name,
-          existingUploadId: uploadId,
-        })
-
-        results.push({
-          name: sheet.name,
-          datasetType: type,
-          imported: res.imported ?? 0,
-          failed: res.failed ?? 0,
-          error: res.error,
-        })
+        try {
+          const res = await saveUpload({
+            fileName: file.name,
+            fileType,
+            fileSizeBytes: file.size,
+            targetTable: type,
+            mapping: m,
+            rows: validRows,
+            rowsTotal: sheet.parsed.totalRows,
+            sheetName: sheet.name,
+            existingUploadId: uploadId,
+          })
+          results.push({
+            name: sheet.name,
+            datasetType: type,
+            imported: res.imported ?? 0,
+            failed: res.failed ?? 0,
+            error: res.error,
+          })
+        } catch (sheetErr) {
+          // Navigation signals must bubble up
+          if (isClientNavigationError(sheetErr)) throw sheetErr
+          const message = sheetErr instanceof Error ? sheetErr.message : 'Unexpected error'
+          console.error(`[workbook] sheet "${sheet.name}" failed:`, sheetErr)
+          results.push({
+            name: sheet.name,
+            datasetType: type,
+            imported: 0,
+            failed: sheet.parsed.totalRows,
+            error: `Sheet failed: ${message}`,
+          })
+        }
       }
 
       // Step 3: Seal the upload record with the final status.
@@ -1307,11 +1326,16 @@ export default function UploadPage() {
       setWorkbookUploadId(uploadId)
       setStep('done')
     } catch (err) {
-      // Re-throw Next.js redirect/not-found signals so the router can handle them
-      if (err && typeof err === 'object' && 'digest' in err) throw err
-      setError(err instanceof Error ? err.message : 'Import failed. Please try again.')
+      // Only re-throw actual Next.js navigation signals (redirect / notFound)
+      if (isClientNavigationError(err)) throw err
+      console.error('[workbook] import failed:', err)
+      const message = err instanceof Error ? err.message : 'Import failed. Please try again.'
+      setError(
+        message === 'An unexpected response was received from the server.'
+          ? 'The server returned an unexpected error. This is usually caused by a very large file or a temporary server issue. Please try again, or split the workbook into smaller files.'
+          : message
+      )
     } finally {
-      // Always clear the loading state — even if an exception was thrown
       setImporting(false)
     }
   }
