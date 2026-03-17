@@ -42,27 +42,32 @@ export async function deleteUpload(uploadId: string): Promise<DeleteUploadResult
 
   if (!upload) return { error: 'File not found or access denied.' }
 
-  // Find which table the data was imported into
-  const { data: job } = await supabase
+  // ── Gather ALL import jobs for this upload (multi-sheet workbooks have many) ──
+  const { data: jobs } = await supabase
     .from('import_jobs')
     .select('target_table')
     .eq('upload_id', uploadId)
     .eq('organization_id', orgId)
-    .limit(1)
-    .single()
 
-  // Delete the imported data rows from the target table first
-  if (job?.target_table) {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    await (supabase as any)
-      .from(job.target_table)
-      .delete()
-      .eq('source_upload_id', uploadId)
-      .eq('organization_id', orgId)
-    // Ignore errors — data rows may already be gone; upload record delete is the critical step
+  // Delete imported data rows from every target table referenced by this upload.
+  // Deduplicate tables in case the same table appears in multiple jobs.
+  if (jobs && jobs.length > 0) {
+    const tables = [...new Set(jobs.map((j) => j.target_table).filter(Boolean))]
+    await Promise.all(
+      tables.map((table) =>
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (supabase as any)
+          .from(table)
+          .delete()
+          .eq('source_upload_id', uploadId)
+          .eq('organization_id', orgId)
+      )
+    )
+    // Errors are intentionally swallowed — data rows may already be gone,
+    // and the upload record delete (which cascades to import_jobs) is the critical step.
   }
 
-  // Delete the upload record — cascades to import_jobs automatically
+  // Delete the upload record — cascades to import_jobs automatically via FK
   const { error: deleteError } = await supabase
     .from('uploads')
     .delete()
