@@ -3,11 +3,11 @@
 import { useRef, useState } from 'react'
 import {
   CheckCircle2, ChefHat, ClipboardList, Users, Upload,
-  AlertCircle, ArrowLeft, ArrowRight, Layers, SkipForward,
-  FileText, HelpCircle, Receipt, Package, Trash2,
+  AlertCircle, ArrowLeft, ArrowRight, Layers,
+  FileText, Receipt, Package, Trash2, X,
 } from 'lucide-react'
 import { parseFile, parseSheet, type ParseResult } from '@/lib/upload/parse'
-import { inspectWorkbook, type SheetInspection, type Confidence } from '@/lib/upload/workbook'
+import { inspectWorkbook, type SheetInspection } from '@/lib/upload/workbook'
 import { validateRows, type ValidationResult } from '@/lib/upload/validate'
 import { autoMap, DATASET_DESCRIPTIONS, DATASET_FIELDS, DATASET_LABELS, type DatasetType } from '@/lib/upload/schemas'
 import { saveUpload, finaliseWorkbookUpload } from '@/lib/actions/upload'
@@ -16,18 +16,17 @@ import { Badge } from '@/components/ui/badge'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { cn } from '@/lib/utils'
 
-// ── Types ────────────────────────────────────────────────────────────────────
+// ── Types ─────────────────────────────────────────────────────────────────────
 
-type Step = 'drop' | 'sheets' | 'preview' | 'mapping' | 'confirm' | 'done'
+type Step = 'drop' | 'sheets' | 'preview' | 'mapping' | 'confirm' | 'done' | 'multi-map' | 'multi-review'
 
-/** A sheet selected by the user for import, with its parsed data ready. */
 interface QueuedSheet {
   name: string
   parsed: ParseResult
   suggestedType: DatasetType | null
+  inspection: SheetInspection
 }
 
-/** Import result for one sheet, accumulated for the done screen. */
 interface SheetResult {
   name: string
   datasetType: DatasetType
@@ -35,6 +34,8 @@ interface SheetResult {
   failed: number
   error?: string
 }
+
+// ── Constants ─────────────────────────────────────────────────────────────────
 
 const STEP_ORDER: Step[] = ['drop', 'sheets', 'preview', 'mapping', 'confirm', 'done']
 const STEP_LABELS: Record<Step, string> = {
@@ -44,6 +45,26 @@ const STEP_LABELS: Record<Step, string> = {
   mapping: 'Map columns',
   confirm: 'Import',
   done: 'Done',
+  'multi-map': 'Map columns',
+  'multi-review': 'Review import',
+}
+
+const DATASET_SHORT_LABELS: Record<DatasetType, string> = {
+  restaurant_sales: 'Sales data',
+  restaurant_menu_items: 'Menu & food costs',
+  restaurant_labour_shifts: 'Labour shifts',
+  restaurant_purchases: 'Purchases',
+  restaurant_inventory_counts: 'Inventory counts',
+  restaurant_waste_adjustments: 'Waste',
+}
+
+const DATASET_TYPE_BADGE: Record<DatasetType, { label: string; className: string }> = {
+  restaurant_sales:             { label: 'Sales data',        className: 'bg-blue-50 border-blue-200 text-blue-700' },
+  restaurant_menu_items:        { label: 'Menu & food costs', className: 'bg-amber-50 border-amber-200 text-amber-700' },
+  restaurant_labour_shifts:     { label: 'Labour shifts',     className: 'bg-purple-50 border-purple-200 text-purple-700' },
+  restaurant_purchases:         { label: 'Purchases',         className: 'bg-emerald-50 border-emerald-200 text-emerald-700' },
+  restaurant_inventory_counts:  { label: 'Inventory counts',  className: 'bg-cyan-50 border-cyan-200 text-cyan-700' },
+  restaurant_waste_adjustments: { label: 'Waste',             className: 'bg-rose-50 border-rose-200 text-rose-700' },
 }
 
 const DATASET_ICONS: Record<DatasetType, React.ReactNode> = {
@@ -55,7 +76,27 @@ const DATASET_ICONS: Record<DatasetType, React.ReactNode> = {
   restaurant_waste_adjustments: <Trash2 className="h-5 w-5" />,
 }
 
-// ── Utilities ────────────────────────────────────────────────────────────────
+// SheetsStep badge lookup (by detected type key, not DatasetType)
+const SHEET_TYPE_BADGE: Record<string, { label: string; className: string }> = {
+  sales:     { label: 'Sales',             className: 'bg-blue-50 border-blue-200 text-blue-700' },
+  menu:      { label: 'Menu & food costs', className: 'bg-amber-50 border-amber-200 text-amber-700' },
+  labour:    { label: 'Labour',            className: 'bg-purple-50 border-purple-200 text-purple-700' },
+  purchases: { label: 'Purchases',         className: 'bg-emerald-50 border-emerald-200 text-emerald-700' },
+  inventory: { label: 'Inventory',         className: 'bg-cyan-50 border-cyan-200 text-cyan-700' },
+  waste:     { label: 'Waste',             className: 'bg-rose-50 border-rose-200 text-rose-700' },
+  skip:      { label: 'Informational',     className: 'bg-muted border-border text-muted-foreground' },
+}
+
+const NEEDS_REVIEW_TYPE_OPTIONS: { value: DatasetType; label: string }[] = [
+  { value: 'restaurant_sales',             label: 'Sales' },
+  { value: 'restaurant_menu_items',        label: 'Menu & food costs' },
+  { value: 'restaurant_labour_shifts',     label: 'Labour' },
+  { value: 'restaurant_purchases',         label: 'Purchases' },
+  { value: 'restaurant_inventory_counts',  label: 'Inventory' },
+  { value: 'restaurant_waste_adjustments', label: 'Waste' },
+]
+
+// ── Utilities ─────────────────────────────────────────────────────────────────
 
 function getFileType(file: File): 'csv' | 'xlsx' | null {
   if (file.name.endsWith('.csv')) return 'csv'
@@ -71,15 +112,66 @@ function getSampleValue(rows: Record<string, string>[], col: string): string {
   return '—'
 }
 
-// ── Step indicator ───────────────────────────────────────────────────────────
+// ── Workbook progress bar ─────────────────────────────────────────────────────
 
-function StepIndicator({ current, isMultiSheet }: { current: Step; isMultiSheet: boolean }) {
-  // The 'sheets' step is only visible for multi-sheet workbooks
-  const visibleSteps = STEP_ORDER.filter((s) => {
-    if (s === 'done') return false
-    if (s === 'sheets' && !isMultiSheet) return false
-    return true
-  })
+function WorkbookProgressBar({
+  sheets,
+  currentStep,
+  currentSheetIdx,
+}: {
+  sheets: QueuedSheet[]
+  currentStep: 'multi-map' | 'multi-review'
+  currentSheetIdx: number
+}) {
+  // Steps shown: Review workbook + per-sheet mapping + Review (done not counted)
+  const steps: string[] = [
+    'Review workbook',
+    ...sheets.map((s) => DATASET_SHORT_LABELS[s.suggestedType!] ?? s.name),
+    'Review',
+  ]
+
+  const activeIdx =
+    currentStep === 'multi-map' ? 1 + currentSheetIdx : 1 + sheets.length
+
+  const progress = steps.length > 1 ? (activeIdx / (steps.length - 1)) * 100 : 100
+
+  return (
+    <div className="mb-8 space-y-3">
+      <div className="flex items-center justify-between">
+        <h1 className="text-2xl font-semibold tracking-tight font-heading">Import workbook</h1>
+        <span className="text-sm text-muted-foreground font-medium">
+          Step {activeIdx + 1} of {steps.length}
+        </span>
+      </div>
+      <div className="h-1 bg-muted rounded-full overflow-hidden">
+        <div
+          className="h-full bg-primary rounded-full transition-all duration-500"
+          style={{ width: `${progress}%` }}
+        />
+      </div>
+      <div className="flex items-center flex-wrap gap-y-1">
+        {steps.map((label, i) => (
+          <div key={i} className="flex items-center shrink-0">
+            {i > 0 && <span className="text-muted-foreground/30 text-[11px] mx-1.5">›</span>}
+            <span className={cn(
+              'text-[11px] whitespace-nowrap',
+              i < activeIdx && 'text-primary/70',
+              i === activeIdx && 'text-foreground font-semibold',
+              i > activeIdx && 'text-muted-foreground/50',
+            )}>
+              {i < activeIdx && '✓ '}{label}
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+// ── Single-sheet step indicator ───────────────────────────────────────────────
+
+function StepIndicator({ current }: { current: Step }) {
+  const visibleSteps = STEP_ORDER.filter((s) => s !== 'done' && s !== 'sheets')
   const currentIndex = STEP_ORDER.indexOf(current)
   return (
     <div className="flex items-center gap-0 mb-8 flex-wrap gap-y-2">
@@ -90,33 +182,27 @@ function StepIndicator({ current, isMultiSheet }: { current: Step; isMultiSheet:
         return (
           <div key={step} className="flex items-center">
             <div className="flex items-center gap-2">
-              <div
-                className={cn(
-                  'h-7 w-7 rounded-full flex items-center justify-center text-xs font-semibold border-2 shrink-0',
-                  done && 'bg-primary border-primary text-primary-foreground',
-                  active && 'border-primary text-primary bg-primary/10',
-                  !done && !active && 'border-muted-foreground/30 text-muted-foreground/50'
-                )}
-              >
+              <div className={cn(
+                'h-7 w-7 rounded-full flex items-center justify-center text-xs font-semibold border-2 shrink-0',
+                done && 'bg-primary border-primary text-primary-foreground',
+                active && 'border-primary text-primary bg-primary/10',
+                !done && !active && 'border-muted-foreground/30 text-muted-foreground/50'
+              )}>
                 {done ? <CheckCircle2 className="h-4 w-4" /> : i + 1}
               </div>
-              <span
-                className={cn(
-                  'text-sm hidden sm:block',
-                  active && 'text-foreground font-medium',
-                  !active && 'text-muted-foreground'
-                )}
-              >
+              <span className={cn(
+                'text-sm hidden sm:block',
+                active && 'text-foreground font-medium',
+                !active && 'text-muted-foreground'
+              )}>
                 {STEP_LABELS[step]}
               </span>
             </div>
             {i < visibleSteps.length - 1 && (
-              <div
-                className={cn(
-                  'h-px w-8 mx-2',
-                  currentIndex > idx ? 'bg-primary' : 'bg-muted-foreground/20'
-                )}
-              />
+              <div className={cn(
+                'h-px w-8 mx-2',
+                currentIndex > idx ? 'bg-primary' : 'bg-muted-foreground/20'
+              )} />
             )}
           </div>
         )
@@ -125,153 +211,7 @@ function StepIndicator({ current, isMultiSheet }: { current: Step; isMultiSheet:
   )
 }
 
-// ── Sheet type badge helpers ─────────────────────────────────────────────────
-
-const TYPE_BADGE: Record<string, { label: string; className: string }> = {
-  sales:     { label: 'Sales',      className: 'bg-blue-50 border-blue-200 text-blue-700' },
-  menu:      { label: 'Menu',       className: 'bg-amber-50 border-amber-200 text-amber-700' },
-  labour:    { label: 'Labour',     className: 'bg-purple-50 border-purple-200 text-purple-700' },
-  purchases: { label: 'Purchases',  className: 'bg-emerald-50 border-emerald-200 text-emerald-700' },
-  inventory: { label: 'Inventory',  className: 'bg-cyan-50 border-cyan-200 text-cyan-700' },
-  waste:     { label: 'Waste',      className: 'bg-rose-50 border-rose-200 text-rose-700' },
-  skip:      { label: 'Info sheet', className: 'bg-muted border-border text-muted-foreground' },
-}
-
-const CONFIDENCE_BADGE: Record<Confidence, { label: string; className: string }> = {
-  high:   { label: 'High confidence',   className: 'text-emerald-700' },
-  medium: { label: 'Medium confidence', className: 'text-amber-700' },
-  low:    { label: 'Needs review',      className: 'text-orange-700' },
-}
-
-// ── Step: Sheets ─────────────────────────────────────────────────────────────
-
-function SheetsStep({
-  fileName,
-  sheets,
-  selected,
-  onToggle,
-  onBack,
-  onContinue,
-}: {
-  fileName: string
-  sheets: SheetInspection[]
-  selected: Set<string>
-  onToggle: (name: string) => void
-  onBack: () => void
-  onContinue: () => void
-}) {
-  const dataSheets = sheets.filter((s) => !s.defaultSkip)
-  const skipSheets = sheets.filter((s) => s.defaultSkip)
-  const selectedCount = selected.size
-
-  return (
-    <div className="space-y-6">
-      <div>
-        <h2 className="text-xl font-semibold font-heading">Select sheets to import</h2>
-        <p className="text-sm text-muted-foreground mt-0.5">
-          <span className="font-medium">{fileName}</span> contains {sheets.length} sheets.
-          Select the ones that contain data you want to import.
-        </p>
-      </div>
-
-      {/* Data sheets */}
-      {dataSheets.length > 0 && (
-        <div className="space-y-2">
-          {dataSheets.map((sheet) => {
-            const isSelected = selected.has(sheet.name)
-            const typeBadge = sheet.detectedType ? TYPE_BADGE[sheet.detectedType] : null
-            const confBadge = CONFIDENCE_BADGE[sheet.confidence]
-
-            return (
-              <label
-                key={sheet.name}
-                className={cn(
-                  'flex items-start gap-4 rounded-xl border-2 p-4 cursor-pointer transition-colors',
-                  isSelected
-                    ? 'border-primary bg-primary/5'
-                    : 'border-muted hover:border-primary/40 bg-card'
-                )}
-              >
-                <input
-                  type="checkbox"
-                  checked={isSelected}
-                  onChange={() => onToggle(sheet.name)}
-                  className="mt-0.5 h-4 w-4 rounded border-border accent-primary shrink-0"
-                />
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <FileText className="h-4 w-4 text-muted-foreground shrink-0" />
-                    <span className="font-medium text-sm">{sheet.name}</span>
-                    {typeBadge && (
-                      <span className={cn('inline-flex items-center rounded border px-1.5 py-0.5 text-[11px] font-semibold', typeBadge.className)}>
-                        {typeBadge.label}
-                      </span>
-                    )}
-                    {!sheet.detectedType && (
-                      <span className="inline-flex items-center gap-1 text-[11px] text-orange-700">
-                        <HelpCircle className="h-3 w-3" />
-                        Unrecognised — you&apos;ll choose the type next
-                      </span>
-                    )}
-                  </div>
-                  <div className="mt-1 flex items-center gap-3">
-                    <span className="text-xs text-muted-foreground">
-                      {sheet.rowCount.toLocaleString()} rows
-                    </span>
-                    {sheet.detectedType && (
-                      <span className={cn('text-xs', confBadge.className)}>
-                        {confBadge.label}
-                      </span>
-                    )}
-                  </div>
-                  {sheet.headers.length > 0 && (
-                    <p className="text-[11px] text-muted-foreground/70 mt-1 truncate">
-                      Columns: {sheet.headers.slice(0, 6).join(', ')}
-                      {sheet.headers.length > 6 && ` +${sheet.headers.length - 6} more`}
-                    </p>
-                  )}
-                </div>
-              </label>
-            )
-          })}
-        </div>
-      )}
-
-      {/* Skip/info sheets — shown collapsed */}
-      {skipSheets.length > 0 && (
-        <div className="rounded-xl border border-dashed border-border bg-muted/30 p-4">
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <SkipForward className="h-4 w-4 shrink-0" />
-            <span>
-              {skipSheets.length === 1
-                ? `"${skipSheets[0].name}" looks like an info sheet and will be skipped.`
-                : `${skipSheets.map((s) => `"${s.name}"`).join(', ')} look like info sheets and will be skipped.`}
-            </span>
-          </div>
-        </div>
-      )}
-
-      {selectedCount === 0 && (
-        <Alert>
-          <AlertCircle className="h-4 w-4" />
-          <AlertDescription>Select at least one sheet to continue.</AlertDescription>
-        </Alert>
-      )}
-
-      <div className="flex justify-between pt-2">
-        <Button variant="outline" onClick={onBack}>
-          <ArrowLeft className="h-4 w-4" /> Back
-        </Button>
-        <Button onClick={onContinue} disabled={selectedCount === 0}>
-          Continue with {selectedCount} sheet{selectedCount !== 1 ? 's' : ''}{' '}
-          <ArrowRight className="h-4 w-4" />
-        </Button>
-      </div>
-    </div>
-  )
-}
-
-// ── Step 1: Drop ─────────────────────────────────────────────────────────────
+// ── Step: Drop ────────────────────────────────────────────────────────────────
 
 function DropStep({ onFile, error }: { onFile: (file: File) => void; error: string | null }) {
   const inputRef = useRef<HTMLInputElement>(null)
@@ -290,16 +230,11 @@ function DropStep({ onFile, error }: { onFile: (file: File) => void; error: stri
           Drag and drop a CSV or Excel file to get started.
         </p>
       </div>
-
       <div
         onClick={() => inputRef.current?.click()}
         onDragOver={(e) => { e.preventDefault(); setDragging(true) }}
         onDragLeave={() => setDragging(false)}
-        onDrop={(e) => {
-          e.preventDefault()
-          setDragging(false)
-          handleFiles(e.dataTransfer.files)
-        }}
+        onDrop={(e) => { e.preventDefault(); setDragging(false); handleFiles(e.dataTransfer.files) }}
         className={cn(
           'border-2 border-dashed rounded-xl p-16 text-center cursor-pointer transition-colors',
           dragging
@@ -316,7 +251,6 @@ function DropStep({ onFile, error }: { onFile: (file: File) => void; error: stri
           Supports .csv and .xlsx files, including multi-sheet workbooks
         </p>
       </div>
-
       <input
         ref={inputRef}
         type="file"
@@ -324,7 +258,6 @@ function DropStep({ onFile, error }: { onFile: (file: File) => void; error: stri
         className="hidden"
         onChange={(e) => handleFiles(e.target.files)}
       />
-
       {error && (
         <Alert variant="destructive">
           <AlertCircle className="h-4 w-4" />
@@ -335,7 +268,494 @@ function DropStep({ onFile, error }: { onFile: (file: File) => void; error: stri
   )
 }
 
-// ── Step 2: Preview + type selection ─────────────────────────────────────────
+// ── Step: Sheets (workbook review) ────────────────────────────────────────────
+
+function SheetsStep({
+  fileName,
+  sheets,
+  onBack,
+  onContinue,
+}: {
+  fileName: string
+  sheets: SheetInspection[]
+  onBack: () => void
+  onContinue: (selectedNames: string[], overrides: Record<string, DatasetType>) => void
+}) {
+  const dataSheets = sheets.filter((s) => !s.defaultSkip)
+  const skipSheets = sheets.filter((s) => s.defaultSkip)
+
+  const [selected, setSelected] = useState<Set<string>>(() =>
+    new Set(dataSheets.filter((s) => s.detectedType && s.confidence !== 'low').map((s) => s.name))
+  )
+  const [overrides, setOverrides] = useState<Record<string, DatasetType>>({})
+
+  function isNeedsReview(sheet: SheetInspection) {
+    return !sheet.detectedType || sheet.confidence === 'low'
+  }
+
+  function toggleSheet(name: string) {
+    setSelected((prev) => {
+      const next = new Set(prev)
+      if (next.has(name)) {
+        next.delete(name)
+        setOverrides((o) => { const n = { ...o }; delete n[name]; return n })
+      } else {
+        next.add(name)
+      }
+      return next
+    })
+  }
+
+  function setOverride(name: string, type: DatasetType | null) {
+    if (type === null) {
+      setOverrides((o) => { const n = { ...o }; delete n[name]; return n })
+    } else {
+      setOverrides((o) => ({ ...o, [name]: type }))
+      setSelected((prev) => { const next = new Set(prev); next.add(name); return next })
+    }
+  }
+
+  const hasUnresolvedReview = dataSheets.some(
+    (s) => selected.has(s.name) && isNeedsReview(s) && !overrides[s.name]
+  )
+  const selectedCount = selected.size
+  const detectedCount = dataSheets.filter((s) => s.detectedType && s.confidence !== 'low').length
+
+  return (
+    <div className="space-y-5">
+      <div>
+        <h2 className="text-xl font-semibold font-heading">Review workbook</h2>
+        <p className="text-sm text-muted-foreground mt-0.5">
+          We found multiple sheets in this workbook. Choose the ones you want Northline to import.
+        </p>
+      </div>
+
+      <div className="rounded-xl border bg-muted/30 p-4">
+        <p className="text-sm font-semibold mb-2">Workbook detected</p>
+        <div className="grid grid-cols-[1fr_auto] gap-x-8 gap-y-1 text-sm">
+          <span className="text-muted-foreground">File</span>
+          <span className="font-medium truncate text-right">{fileName}</span>
+          <span className="text-muted-foreground">Sheets found</span>
+          <span className="font-medium text-right">{sheets.length}</span>
+          <span className="text-muted-foreground">Detected data sheets</span>
+          <span className="font-medium text-right">{detectedCount}</span>
+          <span className="text-muted-foreground">Informational sheets</span>
+          <span className="font-medium text-right">{skipSheets.length}</span>
+        </div>
+      </div>
+
+      <div className="flex items-center justify-between">
+        <p className="text-sm text-muted-foreground">{sheets.length} sheet{sheets.length !== 1 ? 's' : ''}</p>
+        {detectedCount > 0 && (
+          <button
+            onClick={() =>
+              setSelected(new Set(dataSheets.filter((s) => s.detectedType && s.confidence !== 'low').map((s) => s.name)))
+            }
+            className="text-sm text-primary hover:underline"
+          >
+            Select all detected data sheets
+          </button>
+        )}
+      </div>
+
+      <div className="space-y-2">
+        {sheets.map((sheet) => {
+          const isSkip = sheet.defaultSkip
+          const needsReview = !isSkip && isNeedsReview(sheet)
+          const isSelected = selected.has(sheet.name)
+          const override = overrides[sheet.name]
+          const typeBadge = sheet.detectedType ? SHEET_TYPE_BADGE[sheet.detectedType] : null
+          const confidenceLabel = isSkip ? 'Not importable' : needsReview ? 'Needs review' : 'High confidence'
+          const confidenceClass = isSkip ? 'text-muted-foreground' : needsReview ? 'text-orange-600' : 'text-emerald-700'
+
+          return (
+            <div
+              key={sheet.name}
+              className={cn(
+                'rounded-xl border-2 p-4 transition-colors',
+                isSkip ? 'border-border bg-muted/20 opacity-60' :
+                isSelected ? 'border-primary bg-primary/5' :
+                'border-muted bg-card hover:border-primary/40'
+              )}
+            >
+              <div className="flex items-start gap-3">
+                <input
+                  type="checkbox"
+                  checked={isSelected}
+                  disabled={isSkip}
+                  onChange={() => toggleSheet(sheet.name)}
+                  className="mt-0.5 h-4 w-4 rounded border-border accent-primary shrink-0 disabled:cursor-not-allowed"
+                />
+                <div className="flex-1 min-w-0 space-y-1.5">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="font-medium text-sm">{sheet.name}</span>
+                    {isSkip && (
+                      <span className={cn('inline-flex items-center rounded border px-1.5 py-0.5 text-[11px] font-semibold', SHEET_TYPE_BADGE.skip.className)}>
+                        {SHEET_TYPE_BADGE.skip.label}
+                      </span>
+                    )}
+                    {!isSkip && needsReview && (
+                      <span className="inline-flex items-center rounded border border-orange-200 bg-orange-50 px-1.5 py-0.5 text-[11px] font-semibold text-orange-700">
+                        Needs review
+                      </span>
+                    )}
+                    {!isSkip && !needsReview && typeBadge && (
+                      <span className={cn('inline-flex items-center rounded border px-1.5 py-0.5 text-[11px] font-semibold', typeBadge.className)}>
+                        {typeBadge.label}
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-xs">
+                    <span className={confidenceClass}>{confidenceLabel}</span>
+                    <span className="text-muted-foreground"> · {sheet.rowCount.toLocaleString()} rows</span>
+                  </p>
+                  {sheet.headers.length > 0 && (
+                    <p className="text-[11px] text-muted-foreground/70">
+                      Preview columns: {sheet.headers.slice(0, 5).join(', ')}
+                      {sheet.headers.length > 5 && ` +${sheet.headers.length - 5} more`}
+                    </p>
+                  )}
+                  {!isSkip && needsReview && isSelected && (
+                    <select
+                      value={override ?? ''}
+                      onChange={(e) => {
+                        const val = e.target.value
+                        setOverride(sheet.name, val ? (val as DatasetType) : null)
+                      }}
+                      className={cn(
+                        'mt-1 w-full rounded-md border bg-background px-3 py-1.5 text-sm',
+                        'hover:border-ring/50 focus:outline-none focus:ring-2 focus:ring-ring/50',
+                        !override ? 'border-orange-300 bg-orange-50/40' : 'border-border'
+                      )}
+                    >
+                      <option value="">— Choose data type —</option>
+                      {NEEDS_REVIEW_TYPE_OPTIONS.map((opt) => (
+                        <option key={opt.value} value={opt.value}>{opt.label}</option>
+                      ))}
+                    </select>
+                  )}
+                </div>
+              </div>
+            </div>
+          )
+        })}
+      </div>
+
+      {selectedCount === 0 && (
+        <Alert>
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription>Select at least one sheet to continue.</AlertDescription>
+        </Alert>
+      )}
+      {hasUnresolvedReview && (
+        <Alert>
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription>
+            Assign a data type to each selected &ldquo;Needs review&rdquo; sheet before continuing.
+          </AlertDescription>
+        </Alert>
+      )}
+
+      <div className="flex justify-between pt-2">
+        <Button variant="outline" onClick={onBack}>
+          <ArrowLeft className="h-4 w-4" /> Back
+        </Button>
+        <Button
+          onClick={() => onContinue([...selected], overrides)}
+          disabled={selectedCount === 0 || hasUnresolvedReview}
+        >
+          Continue with {selectedCount} sheet{selectedCount !== 1 ? 's' : ''}{' '}
+          <ArrowRight className="h-4 w-4" />
+        </Button>
+      </div>
+    </div>
+  )
+}
+
+// ── Step: Multi-sheet column mapping ─────────────────────────────────────────
+
+function MultiMapStep({
+  sheet,
+  mapping,
+  onMapping,
+  onBack,
+  onNext,
+}: {
+  sheet: QueuedSheet
+  mapping: Record<string, string>
+  onMapping: (m: Record<string, string>) => void
+  onBack: () => void
+  onNext: () => void
+}) {
+  const datasetType = sheet.suggestedType!
+  const fields = DATASET_FIELDS[datasetType]
+  const badge = DATASET_TYPE_BADGE[datasetType]
+  const rows = sheet.parsed.previewRows
+
+  const allRequiredMapped = fields.filter((f) => f.required).every((f) => mapping[f.key])
+  const mappedCount = fields.filter((f) => mapping[f.key]).length
+  const requiredMissing = fields.filter((f) => f.required && !mapping[f.key]).length
+
+  type FieldStatus = 'matched' | 'warning' | 'missing' | 'empty'
+  function fieldStatus(field: (typeof fields)[number]): FieldStatus {
+    const col = mapping[field.key]
+    if (!col) return field.required ? 'missing' : 'empty'
+    const hasSample = rows.some((r) => r[col]?.trim())
+    return hasSample ? 'matched' : 'warning'
+  }
+
+  function setField(key: string, col: string) {
+    onMapping({ ...mapping, [key]: col })
+  }
+
+  const confidenceLabel =
+    sheet.inspection.confidence === 'high' ? 'High confidence' :
+    sheet.inspection.confidence === 'medium' ? 'Medium confidence' : 'Needs review'
+  const confidenceClass =
+    sheet.inspection.confidence === 'low' ? 'text-orange-600' : 'text-emerald-700'
+
+  return (
+    <div className="space-y-5">
+      <div>
+        <h2 className="text-xl font-semibold font-heading">
+          Map columns for {DATASET_SHORT_LABELS[datasetType]}
+        </h2>
+        <p className="text-sm text-muted-foreground mt-0.5">
+          Review how Northline matched this sheet. Update anything that looks incorrect before continuing.
+        </p>
+      </div>
+
+      {/* Sheet summary card */}
+      <div className="rounded-xl border bg-muted/30 p-4">
+        <div className="grid grid-cols-[auto_1fr] gap-x-6 gap-y-1 text-sm">
+          <span className="text-muted-foreground">Sheet</span>
+          <span className="font-medium">{sheet.name}</span>
+          <span className="text-muted-foreground">Type</span>
+          <div>
+            <span className={cn('inline-flex items-center rounded border px-1.5 py-0.5 text-[11px] font-semibold', badge.className)}>
+              {badge.label}
+            </span>
+          </div>
+          <span className="text-muted-foreground">Rows</span>
+          <span className="font-medium">{sheet.parsed.totalRows.toLocaleString()}</span>
+          <span className="text-muted-foreground">Confidence</span>
+          <span className={cn('font-medium', confidenceClass)}>{confidenceLabel}</span>
+        </div>
+      </div>
+
+      {/* Status strip */}
+      <div className={cn(
+        'rounded-lg border px-4 py-2.5 flex items-center gap-2 text-sm',
+        requiredMissing > 0
+          ? 'border-amber-200 bg-amber-50 text-amber-800'
+          : 'border-emerald-200 bg-emerald-50 text-emerald-800'
+      )}>
+        {requiredMissing > 0
+          ? <AlertCircle className="h-4 w-4 shrink-0" />
+          : <CheckCircle2 className="h-4 w-4 shrink-0" />}
+        <span>
+          <span className="font-medium">{mappedCount} of {fields.length} fields mapped</span>
+          {requiredMissing > 0 && (
+            <span className="text-amber-700">
+              {' · '}{requiredMissing} required {requiredMissing === 1 ? 'field' : 'fields'} still need assignment
+            </span>
+          )}
+        </span>
+      </div>
+
+      {/* Mapping table */}
+      <div className="rounded-xl border overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="min-w-full divide-y divide-border text-sm">
+            <thead className="bg-muted/30 border-b border-border">
+              <tr>
+                <th className="px-4 py-2.5 text-left text-[11px] font-medium uppercase tracking-wider text-muted-foreground w-[30%]">Northline field</th>
+                <th className="px-4 py-2.5 text-left text-[11px] font-medium uppercase tracking-wider text-muted-foreground w-[30%]">Your column</th>
+                <th className="px-4 py-2.5 text-left text-[11px] font-medium uppercase tracking-wider text-muted-foreground w-[25%]">Sample value</th>
+                <th className="px-4 py-2.5 text-left text-[11px] font-medium uppercase tracking-wider text-muted-foreground w-[15%]">Status</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-border">
+              {fields.map((field) => {
+                const selectedCol = mapping[field.key] ?? ''
+                const sample = selectedCol ? getSampleValue(rows, selectedCol) : '—'
+                const status = fieldStatus(field)
+                return (
+                  <tr key={field.key} className="hover:bg-muted/20">
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="font-medium">{field.label}</span>
+                        <span className={cn(
+                          'text-[10px] px-1.5 py-0.5 rounded border font-medium',
+                          field.required
+                            ? 'bg-destructive/10 border-destructive/20 text-destructive'
+                            : 'bg-muted border-border text-muted-foreground'
+                        )}>
+                          {field.required ? 'Required' : 'Optional'}
+                        </span>
+                      </div>
+                      {field.hint && <p className="text-xs text-muted-foreground mt-0.5">{field.hint}</p>}
+                    </td>
+                    <td className="px-4 py-3">
+                      <select
+                        value={selectedCol}
+                        onChange={(e) => setField(field.key, e.target.value)}
+                        className={cn(
+                          'w-full rounded-md border bg-background px-3 py-1.5 text-sm transition-colors',
+                          'hover:border-ring/50 focus:outline-none focus:ring-2 focus:ring-ring/50',
+                          field.required && !selectedCol && 'border-destructive/50 bg-destructive/5'
+                        )}
+                      >
+                        <option value="">— skip this field —</option>
+                        {sheet.parsed.headers.map((h) => (
+                          <option key={h} value={h}>{h}</option>
+                        ))}
+                      </select>
+                    </td>
+                    <td className="px-4 py-3 text-muted-foreground text-xs font-mono truncate max-w-[180px]">
+                      {sample}
+                    </td>
+                    <td className="px-4 py-3">
+                      {status === 'matched' && (
+                        <span className="inline-flex items-center gap-1 text-[11px] text-emerald-700 font-medium">
+                          <CheckCircle2 className="h-3.5 w-3.5" /> Matched
+                        </span>
+                      )}
+                      {status === 'warning' && (
+                        <span className="inline-flex items-center gap-1 text-[11px] text-amber-700 font-medium">
+                          <AlertCircle className="h-3.5 w-3.5" /> No data
+                        </span>
+                      )}
+                      {status === 'missing' && (
+                        <span className="inline-flex items-center gap-1 text-[11px] text-destructive font-medium">
+                          <X className="h-3.5 w-3.5" /> Missing
+                        </span>
+                      )}
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {!allRequiredMapped && (
+        <p className="text-sm text-muted-foreground text-center">Map all required fields to continue</p>
+      )}
+
+      <div className="flex justify-between pt-2">
+        <Button variant="outline" onClick={onBack}>
+          <ArrowLeft className="h-4 w-4" /> Back
+        </Button>
+        <Button onClick={onNext} disabled={!allRequiredMapped}>
+          Continue <ArrowRight className="h-4 w-4" />
+        </Button>
+      </div>
+    </div>
+  )
+}
+
+// ── Step: Multi-sheet review ──────────────────────────────────────────────────
+
+function MultiReviewStep({
+  sheetQueue,
+  sheetMappings,
+  allSheets,
+  importing,
+  error,
+  onBack,
+  onImport,
+}: {
+  sheetQueue: QueuedSheet[]
+  sheetMappings: Record<string, Record<string, string>>
+  allSheets: SheetInspection[]
+  importing: boolean
+  error: string | null
+  onBack: () => void
+  onImport: () => void
+}) {
+  const skippedSheets = allSheets.filter(
+    (s) => !sheetQueue.some((q) => q.name === s.name)
+  )
+
+  return (
+    <div className="space-y-5">
+      <div>
+        <h2 className="text-xl font-semibold font-heading">Review import</h2>
+        <p className="text-sm text-muted-foreground mt-0.5">
+          Here&apos;s what Northline is about to import from this workbook.
+        </p>
+      </div>
+
+      <div className="space-y-2">
+        {sheetQueue.map((sheet) => {
+          const type = sheet.suggestedType!
+          const m = sheetMappings[sheet.name] ?? {}
+          const fields = DATASET_FIELDS[type]
+          const requiredMapped = fields.filter((f) => f.required && m[f.key]).length
+          const requiredTotal = fields.filter((f) => f.required).length
+          const badge = DATASET_TYPE_BADGE[type]
+          return (
+            <div key={sheet.name} className="rounded-xl border-2 border-emerald-200 bg-emerald-50/40 p-4">
+              <div className="flex items-start justify-between gap-4">
+                <div className="flex items-start gap-3">
+                  <div className="h-8 w-8 rounded-lg bg-emerald-100 flex items-center justify-center shrink-0 text-emerald-600">
+                    {DATASET_ICONS[type]}
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="font-medium text-sm">{sheet.name}</span>
+                      <span className={cn('inline-flex items-center rounded border px-1.5 py-0.5 text-[11px] font-semibold', badge.className)}>
+                        {badge.label}
+                      </span>
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      {sheet.parsed.totalRows.toLocaleString()} rows
+                      {' · '}{requiredMapped} of {requiredTotal} required fields mapped
+                    </p>
+                  </div>
+                </div>
+                <span className="text-[11px] font-semibold text-emerald-700 whitespace-nowrap shrink-0 mt-0.5">
+                  Ready to import
+                </span>
+              </div>
+            </div>
+          )
+        })}
+
+        {skippedSheets.map((sheet) => (
+          <div key={sheet.name} className="rounded-xl border border-dashed border-border bg-muted/20 px-4 py-3">
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <FileText className="h-4 w-4 shrink-0" />
+              <span className="font-medium">{sheet.name}</span>
+              <span>—</span>
+              <span>Informational sheet, skipped</span>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {error && (
+        <Alert variant="destructive">
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
+      )}
+
+      <div className="flex justify-between pt-2">
+        <Button variant="outline" onClick={onBack} disabled={importing}>
+          <ArrowLeft className="h-4 w-4" /> Back
+        </Button>
+        <Button onClick={onImport} disabled={importing}>
+          {importing ? 'Importing…' : `Import ${sheetQueue.length} sheet${sheetQueue.length !== 1 ? 's' : ''}`}
+        </Button>
+      </div>
+    </div>
+  )
+}
+
+// ── Step: Preview (single-sheet) ──────────────────────────────────────────────
 
 function PreviewStep({
   file,
@@ -344,7 +764,6 @@ function PreviewStep({
   onDatasetType,
   onBack,
   onNext,
-  sheetContext,
 }: {
   file: File
   parsed: ParseResult
@@ -352,15 +771,10 @@ function PreviewStep({
   onDatasetType: (t: DatasetType) => void
   onBack: () => void
   onNext: () => void
-  sheetContext?: { current: number; total: number; name: string } | null
 }) {
   const types: DatasetType[] = [
-    'restaurant_sales',
-    'restaurant_menu_items',
-    'restaurant_labour_shifts',
-    'restaurant_purchases',
-    'restaurant_inventory_counts',
-    'restaurant_waste_adjustments',
+    'restaurant_sales', 'restaurant_menu_items', 'restaurant_labour_shifts',
+    'restaurant_purchases', 'restaurant_inventory_counts', 'restaurant_waste_adjustments',
   ]
 
   return (
@@ -368,23 +782,9 @@ function PreviewStep({
       <div>
         <h2 className="text-xl font-semibold font-heading">What type of data is this?</h2>
         <p className="text-sm text-muted-foreground mt-0.5">
-          {sheetContext ? (
-            <>
-              <span className="inline-flex items-center gap-1.5 rounded-md bg-muted border border-border px-2 py-0.5 text-[11px] font-medium mr-1.5">
-                <Layers className="h-3 w-3" />
-                Sheet {sheetContext.current} of {sheetContext.total}: {sheetContext.name}
-              </span>
-              {parsed.totalRows.toLocaleString()} rows detected
-            </>
-          ) : (
-            <>
-              <span className="font-medium">{file.name}</span> — {parsed.totalRows.toLocaleString()} rows detected
-            </>
-          )}
+          <span className="font-medium">{file.name}</span> — {parsed.totalRows.toLocaleString()} rows detected
         </p>
       </div>
-
-      {/* Dataset type cards */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         {types.map((type) => (
           <button
@@ -392,23 +792,17 @@ function PreviewStep({
             onClick={() => onDatasetType(type)}
             className={cn(
               'text-left border-2 rounded-xl p-4 transition-colors',
-              datasetType === type
-                ? 'border-primary bg-primary/5'
-                : 'border-muted hover:border-primary/50'
+              datasetType === type ? 'border-primary bg-primary/5' : 'border-muted hover:border-primary/50'
             )}
           >
             <div className={cn('mb-2', datasetType === type ? 'text-primary' : 'text-muted-foreground')}>
               {DATASET_ICONS[type]}
             </div>
             <p className="text-sm font-semibold">{DATASET_LABELS[type]}</p>
-            <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
-              {DATASET_DESCRIPTIONS[type]}
-            </p>
+            <p className="text-xs text-muted-foreground mt-1 leading-relaxed">{DATASET_DESCRIPTIONS[type]}</p>
           </button>
         ))}
       </div>
-
-      {/* Data preview */}
       <div>
         <p className="text-[11px] font-medium mb-2 text-muted-foreground uppercase tracking-wider">
           Preview (first 5 rows)
@@ -418,9 +812,7 @@ function PreviewStep({
             <thead className="bg-muted/50">
               <tr>
                 {parsed.headers.map((h) => (
-                  <th key={h} className="px-3 py-2 text-left font-medium text-muted-foreground whitespace-nowrap">
-                    {h}
-                  </th>
+                  <th key={h} className="px-3 py-2 text-left font-medium text-muted-foreground whitespace-nowrap">{h}</th>
                 ))}
               </tr>
             </thead>
@@ -438,20 +830,15 @@ function PreviewStep({
           </table>
         </div>
       </div>
-
       <div className="flex justify-between pt-2">
-        <Button variant="outline" onClick={onBack}>
-          <ArrowLeft className="h-4 w-4" /> Back
-        </Button>
-        <Button onClick={onNext} disabled={!datasetType}>
-          Continue <ArrowRight className="h-4 w-4" />
-        </Button>
+        <Button variant="outline" onClick={onBack}><ArrowLeft className="h-4 w-4" /> Back</Button>
+        <Button onClick={onNext} disabled={!datasetType}>Continue <ArrowRight className="h-4 w-4" /></Button>
       </div>
     </div>
   )
 }
 
-// ── Step 3: Column mapping ────────────────────────────────────────────────────
+// ── Step: Mapping (single-sheet) ──────────────────────────────────────────────
 
 function MappingStep({
   parsed,
@@ -460,7 +847,6 @@ function MappingStep({
   onMapping,
   onBack,
   onNext,
-  sheetContext,
 }: {
   parsed: ParseResult
   datasetType: DatasetType
@@ -468,33 +854,19 @@ function MappingStep({
   onMapping: (m: Record<string, string>) => void
   onBack: () => void
   onNext: () => void
-  sheetContext?: { current: number; total: number; name: string } | null
 }) {
   const fields = DATASET_FIELDS[datasetType]
   const mappedRequired = fields.filter((f) => f.required && mapping[f.key])
   const allRequiredMapped = fields.filter((f) => f.required).every((f) => mapping[f.key])
-
-  function setField(fieldKey: string, col: string) {
-    onMapping({ ...mapping, [fieldKey]: col || '' })
-  }
-
-  const headerOptions = ['', ...parsed.headers]
 
   return (
     <div className="space-y-6">
       <div>
         <h2 className="text-xl font-semibold font-heading">Map your columns</h2>
         <p className="text-sm text-muted-foreground mt-0.5">
-          {sheetContext && (
-            <span className="inline-flex items-center gap-1.5 rounded-md bg-muted border border-border px-2 py-0.5 text-[11px] font-medium mr-1.5">
-              <Layers className="h-3 w-3" />
-              Sheet {sheetContext.current} of {sheetContext.total}: {sheetContext.name}
-            </span>
-          )}
           Tell us which column in your file matches each field. We&apos;ve pre-filled what we could.
         </p>
       </div>
-
       <div className="rounded-xl border overflow-hidden">
         <div className="overflow-x-auto">
           <table className="min-w-full divide-y divide-border text-sm">
@@ -514,34 +886,26 @@ function MappingStep({
                     <td className="px-4 py-3">
                       <span className="font-medium">{field.label}</span>
                       {field.required && (
-                        <Badge variant="destructive" className="ml-2 text-[10px] px-1.5 py-0">
-                          required
-                        </Badge>
+                        <Badge variant="destructive" className="ml-2 text-[10px] px-1.5 py-0">required</Badge>
                       )}
-                      {field.hint && (
-                        <p className="text-xs text-muted-foreground mt-0.5">{field.hint}</p>
-                      )}
+                      {field.hint && <p className="text-xs text-muted-foreground mt-0.5">{field.hint}</p>}
                     </td>
                     <td className="px-4 py-3">
                       <select
                         value={selectedCol}
-                        onChange={(e) => setField(field.key, e.target.value)}
+                        onChange={(e) => onMapping({ ...mapping, [field.key]: e.target.value })}
                         className={cn(
                           'w-full rounded-md border border-border bg-background px-3 py-1.5 text-sm transition-colors',
                           'hover:border-ring/50 focus:outline-none focus:ring-2 focus:ring-ring/50',
                           field.required && !selectedCol && 'border-destructive/50 bg-destructive/5'
                         )}
                       >
-                        {headerOptions.map((h) => (
-                          <option key={h} value={h}>
-                            {h || '— skip this field —'}
-                          </option>
+                        {['', ...parsed.headers].map((h) => (
+                          <option key={h} value={h}>{h || '— skip this field —'}</option>
                         ))}
                       </select>
                     </td>
-                    <td className="px-4 py-3 text-muted-foreground text-xs font-mono">
-                      {sample}
-                    </td>
+                    <td className="px-4 py-3 text-muted-foreground text-xs font-mono">{sample}</td>
                   </tr>
                 )
               })}
@@ -549,7 +913,6 @@ function MappingStep({
           </table>
         </div>
       </div>
-
       {!allRequiredMapped && (
         <Alert>
           <AlertCircle className="h-4 w-4" />
@@ -559,20 +922,15 @@ function MappingStep({
           </AlertDescription>
         </Alert>
       )}
-
       <div className="flex justify-between">
-        <Button variant="outline" onClick={onBack}>
-          <ArrowLeft className="h-4 w-4" /> Back
-        </Button>
-        <Button onClick={onNext} disabled={!allRequiredMapped}>
-          Review import <ArrowRight className="h-4 w-4" />
-        </Button>
+        <Button variant="outline" onClick={onBack}><ArrowLeft className="h-4 w-4" /> Back</Button>
+        <Button onClick={onNext} disabled={!allRequiredMapped}>Review import <ArrowRight className="h-4 w-4" /></Button>
       </div>
     </div>
   )
 }
 
-// ── Step 4: Confirm ──────────────────────────────────────────────────────────
+// ── Step: Confirm (single-sheet) ──────────────────────────────────────────────
 
 function ConfirmStep({
   parsed,
@@ -582,7 +940,6 @@ function ConfirmStep({
   error,
   onBack,
   onImport,
-  sheetContext,
 }: {
   parsed: ParseResult
   datasetType: DatasetType
@@ -591,31 +948,15 @@ function ConfirmStep({
   error: string | null
   onBack: () => void
   onImport: () => void
-  sheetContext?: { current: number; total: number; name: string } | null
 }) {
-  const isLastSheet = !sheetContext || sheetContext.current === sheetContext.total
-  const buttonLabel = importing
-    ? 'Importing…'
-    : isLastSheet
-    ? 'Import data'
-    : `Import & continue to sheet ${(sheetContext?.current ?? 0) + 1}`
-
   return (
     <div className="space-y-6">
       <div>
         <h2 className="text-xl font-semibold font-heading">Ready to import</h2>
         <p className="text-sm text-muted-foreground mt-0.5">
-          {sheetContext && (
-            <span className="inline-flex items-center gap-1.5 rounded-md bg-muted border border-border px-2 py-0.5 text-[11px] font-medium mr-1.5">
-              <Layers className="h-3 w-3" />
-              Sheet {sheetContext.current} of {sheetContext.total}: {sheetContext.name}
-            </span>
-          )}
           Importing into <span className="font-medium">{DATASET_LABELS[datasetType]}</span>
         </p>
       </div>
-
-      {/* Summary */}
       <div className="grid grid-cols-2 gap-4">
         <div className="rounded-xl border bg-muted/30 p-4 text-center">
           <p className="text-3xl font-bold text-primary">{validation.validCount.toLocaleString()}</p>
@@ -625,10 +966,7 @@ function ConfirmStep({
           'rounded-xl border p-4 text-center',
           validation.invalidCount > 0 ? 'bg-destructive/5 border-destructive/20' : 'bg-muted/30'
         )}>
-          <p className={cn(
-            'text-3xl font-bold',
-            validation.invalidCount > 0 ? 'text-destructive' : 'text-muted-foreground'
-          )}>
+          <p className={cn('text-3xl font-bold', validation.invalidCount > 0 ? 'text-destructive' : 'text-muted-foreground')}>
             {validation.invalidCount.toLocaleString()}
           </p>
           <p className="text-sm text-muted-foreground mt-1">
@@ -636,8 +974,6 @@ function ConfirmStep({
           </p>
         </div>
       </div>
-
-      {/* Validation errors */}
       {validation.errors.length > 0 && (
         <div className="space-y-2">
           <p className="text-sm font-medium text-destructive">Issues found:</p>
@@ -656,52 +992,45 @@ function ConfirmStep({
           </div>
         </div>
       )}
-
       {validation.validCount === 0 && (
         <Alert variant="destructive">
           <AlertCircle className="h-4 w-4" />
-          <AlertDescription>
-            No valid rows to import. Go back and fix the column mapping or check your file.
-          </AlertDescription>
+          <AlertDescription>No valid rows to import. Go back and fix the column mapping or check your file.</AlertDescription>
         </Alert>
       )}
-
       {error && (
         <Alert variant="destructive">
           <AlertCircle className="h-4 w-4" />
           <AlertDescription>{error}</AlertDescription>
         </Alert>
       )}
-
       <div className="flex justify-between">
-        <Button variant="outline" onClick={onBack} disabled={importing}>
-          <ArrowLeft className="h-4 w-4" /> Back
-        </Button>
+        <Button variant="outline" onClick={onBack} disabled={importing}><ArrowLeft className="h-4 w-4" /> Back</Button>
         <Button onClick={onImport} disabled={importing || validation.validCount === 0}>
-          {buttonLabel}
-          {!importing && !isLastSheet && <ArrowRight className="h-4 w-4" />}
+          {importing ? 'Importing…' : 'Import data'}
         </Button>
       </div>
     </div>
   )
 }
 
-// ── Step 5: Done ─────────────────────────────────────────────────────────────
+// ── Step: Done ────────────────────────────────────────────────────────────────
 
 function DoneStep({
   sheetResults,
   singleResult,
+  isWorkbook,
   onReset,
 }: {
   sheetResults: SheetResult[]
   singleResult?: { imported: number; failed: number } | null
+  isWorkbook?: boolean
   onReset: () => void
 }) {
-  const isMultiSheet = sheetResults.length > 0
-  const totalImported = isMultiSheet
+  const totalImported = isWorkbook
     ? sheetResults.reduce((s, r) => s + r.imported, 0)
     : (singleResult?.imported ?? 0)
-  const totalFailed = isMultiSheet
+  const totalFailed = isWorkbook
     ? sheetResults.reduce((s, r) => s + r.failed, 0)
     : (singleResult?.failed ?? 0)
 
@@ -714,54 +1043,73 @@ function DoneStep({
         <div>
           <h2 className="text-2xl font-semibold font-heading">Import complete</h2>
           <p className="text-muted-foreground mt-1">
-            {totalImported.toLocaleString()} {totalImported === 1 ? 'row' : 'rows'} imported successfully.
-            {totalFailed > 0 && (
-              <span className="text-destructive"> {totalFailed.toLocaleString()} skipped due to errors.</span>
-            )}
+            {isWorkbook
+              ? 'Your workbook has been processed successfully.'
+              : (
+                <>
+                  {totalImported.toLocaleString()} {totalImported === 1 ? 'row' : 'rows'} imported successfully.
+                  {totalFailed > 0 && (
+                    <span className="text-destructive"> {totalFailed.toLocaleString()} skipped due to errors.</span>
+                  )}
+                </>
+              )
+            }
           </p>
         </div>
       </div>
 
-      {/* Per-sheet breakdown */}
-      {isMultiSheet && (
+      {isWorkbook && sheetResults.length > 0 && (
         <div className="rounded-xl border overflow-hidden">
           <div className="bg-muted/30 px-4 py-2.5 border-b border-border">
-            <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
-              Sheet results
-            </p>
+            <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Sheet results</p>
           </div>
           <div className="divide-y divide-border">
-            {sheetResults.map((r) => (
-              <div key={r.name} className="flex items-center justify-between px-4 py-3">
-                <div className="flex items-center gap-2">
-                  <FileText className="h-4 w-4 text-muted-foreground shrink-0" />
-                  <div>
-                    <p className="text-sm font-medium">{r.name}</p>
-                    <p className="text-xs text-muted-foreground">{DATASET_LABELS[r.datasetType]}</p>
+            {sheetResults.map((r) => {
+              const badge = DATASET_TYPE_BADGE[r.datasetType]
+              return (
+                <div key={r.name} className="flex items-center justify-between px-4 py-3">
+                  <div className="flex items-center gap-2.5">
+                    <div className="h-7 w-7 rounded-md bg-primary/10 flex items-center justify-center shrink-0 text-primary/70">
+                      {DATASET_ICONS[r.datasetType]}
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium">{r.name}</p>
+                      <span className={cn('inline-flex items-center rounded border px-1.5 py-0.5 text-[10px] font-semibold', badge.className)}>
+                        {badge.label}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="text-right text-sm">
+                    {r.error ? (
+                      <span className="text-destructive text-xs">{r.error}</span>
+                    ) : (
+                      <>
+                        <p className="font-semibold text-emerald-700">{r.imported.toLocaleString()} imported</p>
+                        {r.failed > 0 && <p className="text-xs text-muted-foreground">{r.failed.toLocaleString()} skipped</p>}
+                      </>
+                    )}
                   </div>
                 </div>
-                <div className="text-right text-sm">
-                  {r.error ? (
-                    <span className="text-destructive text-xs">{r.error}</span>
-                  ) : (
-                    <>
-                      <span className="font-medium text-emerald-700">{r.imported.toLocaleString()} imported</span>
-                      {r.failed > 0 && (
-                        <span className="text-muted-foreground text-xs"> / {r.failed.toLocaleString()} skipped</span>
-                      )}
-                    </>
-                  )}
-                </div>
-              </div>
-            ))}
+              )
+            })}
           </div>
         </div>
       )}
 
-      <div className="flex justify-center gap-3">
-        <Button onClick={onReset} variant="outline">Upload another file</Button>
-        <Button asChild variant="outline"><a href="/uploads">View my files</a></Button>
-        <Button asChild><a href="/dashboard">Go to dashboard</a></Button>
+      <div className="flex justify-center gap-3 flex-wrap">
+        {isWorkbook ? (
+          <>
+            <Button asChild><a href="/dashboard">View dashboard</a></Button>
+            <Button asChild variant="outline"><a href="/uploads">View my files</a></Button>
+            <Button variant="outline" onClick={onReset}>Import another workbook</Button>
+          </>
+        ) : (
+          <>
+            <Button onClick={onReset} variant="outline">Upload another file</Button>
+            <Button asChild variant="outline"><a href="/uploads">View my files</a></Button>
+            <Button asChild><a href="/dashboard">Go to dashboard</a></Button>
+          </>
+        )}
       </div>
     </div>
   )
@@ -770,7 +1118,7 @@ function DoneStep({
 // ── Main wizard ───────────────────────────────────────────────────────────────
 
 export default function UploadPage() {
-  // ── Core wizard state ──────────────────────────────────────────────────────
+  // ── Core single-sheet state ────────────────────────────────────────────────
   const [step, setStep] = useState<Step>('drop')
   const [file, setFile] = useState<File | null>(null)
   const [parsed, setParsed] = useState<ParseResult | null>(null)
@@ -780,27 +1128,21 @@ export default function UploadPage() {
   const [importing, setImporting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [parsing, setParsing] = useState(false)
-  // Single-sheet result
   const [singleResult, setSingleResult] = useState<{ imported: number; failed: number } | null>(null)
 
   // ── Multi-sheet state ──────────────────────────────────────────────────────
   const [fileBuffer, setFileBuffer] = useState<ArrayBuffer | null>(null)
   const [workbookSheets, setWorkbookSheets] = useState<SheetInspection[] | null>(null)
-  const [selectedSheetNames, setSelectedSheetNames] = useState<Set<string>>(new Set())
   const [sheetQueue, setSheetQueue] = useState<QueuedSheet[]>([])
+  const [sheetMappings, setSheetMappings] = useState<Record<string, Record<string, string>>>({})
   const [currentSheetIdx, setCurrentSheetIdx] = useState(0)
   const [sheetResults, setSheetResults] = useState<SheetResult[]>([])
   const [workbookUploadId, setWorkbookUploadId] = useState<string | null>(null)
 
-  const isMultiSheet = sheetQueue.length > 1
+  const isWorkbook = sheetQueue.length > 0
   const currentSheet = sheetQueue[currentSheetIdx] ?? null
 
-  // ── Sheet context for step labels ──────────────────────────────────────────
-  const sheetContext = isMultiSheet && currentSheet
-    ? { current: currentSheetIdx + 1, total: sheetQueue.length, name: currentSheet.name }
-    : null
-
-  // ── Handlers ───────────────────────────────────────────────────────────────
+  // ── File handler ───────────────────────────────────────────────────────────
 
   async function handleFile(f: File) {
     setError(null)
@@ -816,15 +1158,13 @@ export default function UploadPage() {
       setFile(f)
 
       if (type === 'xlsx') {
-        // Inspect all sheets
         const sheets = inspectWorkbook(buffer)
         const dataSheets = sheets.filter((s) => !s.defaultSkip && s.rowCount > 0 && s.headers.length >= 2)
 
         if (dataSheets.length >= 2) {
-          // Multi-sheet workbook path
           setWorkbookSheets(sheets)
-          setSelectedSheetNames(new Set(dataSheets.map((s) => s.name)))
           setSheetQueue([])
+          setSheetMappings({})
           setCurrentSheetIdx(0)
           setSheetResults([])
           setWorkbookUploadId(null)
@@ -832,13 +1172,11 @@ export default function UploadPage() {
           return
         }
 
-        // Single-sheet XLSX — pick the first data sheet (or first sheet)
         const targetSheet = dataSheets[0] ?? sheets[0]
         if (!targetSheet) throw new Error('No sheets found in this file.')
         const result = parseSheet(buffer, targetSheet.name)
         setParsed(result)
       } else {
-        // CSV
         const result = await parseFile(f)
         setParsed(result)
       }
@@ -855,37 +1193,32 @@ export default function UploadPage() {
     }
   }
 
-  function toggleSheet(name: string) {
-    setSelectedSheetNames((prev) => {
-      const next = new Set(prev)
-      if (next.has(name)) next.delete(name)
-      else next.add(name)
-      return next
-    })
-  }
+  // ── Multi-sheet handlers ───────────────────────────────────────────────────
 
-  function handleSheetsContinue() {
+  function handleSheetsContinue(selectedNames: string[], overrides: Record<string, DatasetType>) {
     if (!fileBuffer || !workbookSheets) return
     setParsing(true)
     try {
-      // Parse all selected sheets in workbook order
-      const ordered = workbookSheets
-        .filter((s) => selectedSheetNames.has(s.name))
+      const ordered = workbookSheets.filter((s) => selectedNames.includes(s.name))
       const queue: QueuedSheet[] = ordered.map((s) => ({
         name: s.name,
         parsed: parseSheet(fileBuffer, s.name),
-        suggestedType: s.datasetType,
+        suggestedType: overrides[s.name] ?? s.datasetType,
+        inspection: s,
       }))
+
+      // Auto-map all sheets upfront
+      const mappings: Record<string, Record<string, string>> = {}
+      for (const q of queue) {
+        mappings[q.name] = q.suggestedType ? autoMap(q.parsed.headers, q.suggestedType) : {}
+      }
+
       setSheetQueue(queue)
+      setSheetMappings(mappings)
       setCurrentSheetIdx(0)
-      // Pre-fill state for first sheet
-      const first = queue[0]
-      setParsed(first.parsed)
-      const suggested = first.suggestedType
-      setDatasetType(suggested)
-      setMapping(suggested ? autoMap(first.parsed.headers, suggested) : {})
-      setValidation(null)
-      setStep('preview')
+      setSheetResults([])
+      setWorkbookUploadId(null)
+      setStep('multi-map')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to read sheets.')
     } finally {
@@ -893,19 +1226,83 @@ export default function UploadPage() {
     }
   }
 
+  function handleMultiMapNext() {
+    const nextIdx = currentSheetIdx + 1
+    if (nextIdx < sheetQueue.length) {
+      setCurrentSheetIdx(nextIdx)
+    } else {
+      setStep('multi-review')
+    }
+  }
+
+  function handleMultiMapBack() {
+    if (currentSheetIdx === 0) {
+      setStep('sheets')
+    } else {
+      setCurrentSheetIdx(currentSheetIdx - 1)
+    }
+  }
+
+  async function handleMultiImport() {
+    if (!file) return
+    setImporting(true)
+    setError(null)
+
+    const fileType = getFileType(file)!
+    const results: SheetResult[] = []
+    let uploadId: string | null = workbookUploadId
+
+    for (const sheet of sheetQueue) {
+      const type = sheet.suggestedType!
+      const m = sheetMappings[sheet.name] ?? {}
+      const v = validateRows(sheet.parsed.rows, m, type)
+      const validRows = sheet.parsed.rows.filter((_, i) => {
+        const rowNum = i + 2
+        return !v.errors.some((e) => e.row === rowNum)
+      })
+
+      const res = await saveUpload({
+        fileName: file.name,
+        fileType,
+        fileSizeBytes: file.size,
+        targetTable: type,
+        mapping: m,
+        rows: validRows,
+        sheetName: sheet.name,
+        existingUploadId: uploadId ?? undefined,
+      })
+
+      if (!uploadId && res.uploadId) uploadId = res.uploadId
+      results.push({
+        name: sheet.name,
+        datasetType: type,
+        imported: res.imported ?? 0,
+        failed: res.failed ?? 0,
+        error: res.error ?? undefined,
+      })
+    }
+
+    if (uploadId) {
+      const anySucceeded = results.some((r) => r.imported > 0)
+      await finaliseWorkbookUpload(uploadId, anySucceeded)
+    }
+
+    setSheetResults(results)
+    setWorkbookUploadId(uploadId)
+    setImporting(false)
+    setStep('done')
+  }
+
+  // ── Single-sheet handlers ──────────────────────────────────────────────────
+
   function handleDatasetType(type: DatasetType) {
     setDatasetType(type)
     if (parsed) setMapping(autoMap(parsed.headers, type))
   }
 
-  function handleGoToMapping() {
-    setStep('mapping')
-  }
-
   function handleGoToConfirm() {
     if (!parsed || !datasetType) return
-    const v = validateRows(parsed.rows, mapping, datasetType)
-    setValidation(v)
+    setValidation(validateRows(parsed.rows, mapping, datasetType))
     setStep('confirm')
   }
 
@@ -927,57 +1324,12 @@ export default function UploadPage() {
       targetTable: datasetType,
       mapping,
       rows: validRows,
-      sheetName: isMultiSheet ? currentSheet?.name : undefined,
-      existingUploadId: isMultiSheet ? (workbookUploadId ?? undefined) : undefined,
     })
 
     setImporting(false)
-
-    if (res.error) {
-      setError(res.error)
-      return
-    }
-
-    // Capture upload ID for subsequent sheets
-    if (isMultiSheet && !workbookUploadId && res.uploadId) {
-      setWorkbookUploadId(res.uploadId)
-    }
-
-    const result: SheetResult = {
-      name: currentSheet?.name ?? file.name,
-      datasetType,
-      imported: res.imported ?? 0,
-      failed: res.failed ?? 0,
-    }
-
-    if (isMultiSheet) {
-      const newResults = [...sheetResults, result]
-      setSheetResults(newResults)
-
-      const nextIdx = currentSheetIdx + 1
-      if (nextIdx < sheetQueue.length) {
-        // Advance to next sheet
-        const next = sheetQueue[nextIdx]
-        setCurrentSheetIdx(nextIdx)
-        setParsed(next.parsed)
-        const suggested = next.suggestedType
-        setDatasetType(suggested)
-        setMapping(suggested ? autoMap(next.parsed.headers, suggested) : {})
-        setValidation(null)
-        setStep('preview')
-      } else {
-        // All sheets done — finalise the workbook upload record
-        const uid = workbookUploadId ?? res.uploadId
-        if (uid) {
-          const anySucceeded = newResults.some((r) => r.imported > 0)
-          await finaliseWorkbookUpload(uid, anySucceeded)
-        }
-        setStep('done')
-      }
-    } else {
-      setSingleResult({ imported: res.imported ?? 0, failed: res.failed ?? 0 })
-      setStep('done')
-    }
+    if (res.error) { setError(res.error); return }
+    setSingleResult({ imported: res.imported ?? 0, failed: res.failed ?? 0 })
+    setStep('done')
   }
 
   function handleReset() {
@@ -990,47 +1342,46 @@ export default function UploadPage() {
     setValidation(null)
     setSingleResult(null)
     setWorkbookSheets(null)
-    setSelectedSheetNames(new Set())
     setSheetQueue([])
+    setSheetMappings({})
     setCurrentSheetIdx(0)
     setSheetResults([])
     setWorkbookUploadId(null)
     setError(null)
   }
 
-  // Back from preview: go to sheets step if multi-sheet workbook, else drop
-  function handlePreviewBack() {
-    if (workbookSheets && workbookSheets.length > 0) {
-      setStep('sheets')
-    } else {
-      setStep('drop')
-    }
-  }
+  // ── Render ─────────────────────────────────────────────────────────────────
 
-  // Back from mapping: if we're past sheet 0, we can't undo the previous import
-  // so just go back to preview for the current sheet
-  function handleMappingBack() {
-    setStep('preview')
-  }
-
-  // ── Render ──────────────────────────────────────────────────────────────────
+  const isMultiStep = step === 'multi-map' || step === 'multi-review'
+  const showSingleHeader = !isMultiStep && step !== 'done'
 
   return (
     <div className="px-8 py-7 max-w-3xl mx-auto">
-      <div className="mb-6">
-        <h1 className="text-2xl font-semibold tracking-tight font-heading">Import data</h1>
-        <p className="text-muted-foreground text-sm mt-0.5">
-          Upload a CSV or Excel file — we&apos;ll walk you through the rest.
-        </p>
-      </div>
+      {/* Single-sheet header + step indicator */}
+      {showSingleHeader && (
+        <>
+          <div className="mb-6">
+            <h1 className="text-2xl font-semibold tracking-tight font-heading">Import data</h1>
+            <p className="text-muted-foreground text-sm mt-0.5">
+              Upload a CSV or Excel file — we&apos;ll walk you through the rest.
+            </p>
+          </div>
+          {step !== 'sheets' && (
+            <StepIndicator current={step} />
+          )}
+        </>
+      )}
 
-      {step !== 'done' && <StepIndicator current={step} isMultiSheet={isMultiSheet || (workbookSheets?.length ?? 0) > 1} />}
+      {/* Workbook progress bar */}
+      {isMultiStep && (
+        <WorkbookProgressBar
+          sheets={sheetQueue}
+          currentStep={step as 'multi-map' | 'multi-review'}
+          currentSheetIdx={currentSheetIdx}
+        />
+      )}
 
       <div className="rounded-xl border bg-card p-6 shadow-sm">
-        {step === 'drop' && !parsing && (
-          <DropStep onFile={handleFile} error={error} />
-        )}
-
         {parsing && (
           <div className="flex flex-col items-center justify-center py-20 gap-3 text-muted-foreground">
             <div className="h-8 w-8 rounded-full border-2 border-primary border-t-transparent animate-spin" />
@@ -1038,14 +1389,38 @@ export default function UploadPage() {
           </div>
         )}
 
+        {step === 'drop' && !parsing && (
+          <DropStep onFile={handleFile} error={error} />
+        )}
+
         {step === 'sheets' && workbookSheets && file && !parsing && (
           <SheetsStep
             fileName={file.name}
             sheets={workbookSheets}
-            selected={selectedSheetNames}
-            onToggle={toggleSheet}
             onBack={() => setStep('drop')}
             onContinue={handleSheetsContinue}
+          />
+        )}
+
+        {step === 'multi-map' && currentSheet && !parsing && (
+          <MultiMapStep
+            sheet={currentSheet}
+            mapping={sheetMappings[currentSheet.name] ?? {}}
+            onMapping={(m) => setSheetMappings((prev) => ({ ...prev, [currentSheet.name]: m }))}
+            onBack={handleMultiMapBack}
+            onNext={handleMultiMapNext}
+          />
+        )}
+
+        {step === 'multi-review' && workbookSheets && !parsing && (
+          <MultiReviewStep
+            sheetQueue={sheetQueue}
+            sheetMappings={sheetMappings}
+            allSheets={workbookSheets}
+            importing={importing}
+            error={error}
+            onBack={() => { setCurrentSheetIdx(sheetQueue.length - 1); setStep('multi-map') }}
+            onImport={handleMultiImport}
           />
         )}
 
@@ -1055,9 +1430,8 @@ export default function UploadPage() {
             parsed={parsed}
             datasetType={datasetType}
             onDatasetType={handleDatasetType}
-            onBack={handlePreviewBack}
-            onNext={handleGoToMapping}
-            sheetContext={sheetContext}
+            onBack={() => workbookSheets ? setStep('sheets') : setStep('drop')}
+            onNext={() => setStep('mapping')}
           />
         )}
 
@@ -1067,9 +1441,8 @@ export default function UploadPage() {
             datasetType={datasetType}
             mapping={mapping}
             onMapping={setMapping}
-            onBack={handleMappingBack}
+            onBack={() => setStep('preview')}
             onNext={handleGoToConfirm}
-            sheetContext={sheetContext}
           />
         )}
 
@@ -1082,7 +1455,6 @@ export default function UploadPage() {
             error={error}
             onBack={() => setStep('mapping')}
             onImport={handleImport}
-            sheetContext={sheetContext}
           />
         )}
 
@@ -1090,6 +1462,7 @@ export default function UploadPage() {
           <DoneStep
             sheetResults={sheetResults}
             singleResult={singleResult}
+            isWorkbook={isWorkbook}
             onReset={handleReset}
           />
         )}
