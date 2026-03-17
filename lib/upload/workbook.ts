@@ -3,7 +3,7 @@ import type { DatasetType } from './schemas'
 
 // ── Sheet detection ───────────────────────────────────────────────────────────
 
-export type SheetDetectedType = 'sales' | 'menu' | 'labour' | 'skip'
+export type SheetDetectedType = 'sales' | 'menu' | 'labour' | 'purchases' | 'inventory' | 'waste' | 'skip'
 export type Confidence = 'high' | 'medium' | 'low'
 
 export interface SheetInspection {
@@ -38,6 +38,18 @@ const LABOUR_NAMES = [
   'labour', 'labor', 'shifts', 'staff', 'employees', 'workforce',
   'rota', 'schedule', 'labour shifts', 'labor shifts', 'payroll',
 ]
+const PURCHASES_NAMES = [
+  'purchases', 'purchase', 'suppliers', 'receiving', 'received',
+  'orders', 'invoices', 'goods received', 'procurement', 'buying',
+]
+const INVENTORY_NAMES = [
+  'inventory', 'stock', 'stock count', 'stocktake', 'counts',
+  'stock take', 'inventory count', 'stock counts', 'variance',
+]
+const WASTE_NAMES = [
+  'waste', 'shrinkage', 'adjustments', 'spoilage', 'wastage',
+  'write off', 'write-off', 'losses',
+]
 
 // ── Header signature lists ────────────────────────────────────────────────────
 
@@ -63,6 +75,21 @@ const LABOUR_HEADERS = [
   'regular pay', 'ot pay', 'overtime',
   'labour_cost', 'labour cost', 'labor cost',
   'shift_date', 'shift date',
+]
+const PURCHASES_HEADERS = [
+  'purchase_date', 'purchase date', 'supplier', 'invoice', 'invoice_reference',
+  'unit_cost', 'unit cost', 'total_cost', 'total cost',
+  'quantity received', 'qty received', 'unit_of_measure',
+]
+const INVENTORY_HEADERS = [
+  'count_date', 'count date', 'opening_quantity', 'opening quantity',
+  'closing_quantity', 'closing quantity', 'opening_value', 'closing_value',
+  'stock value', 'count_reference', 'stocktake',
+]
+const WASTE_HEADERS = [
+  'waste_date', 'waste date', 'quantity_wasted', 'quantity wasted',
+  'waste_reason', 'waste reason', 'estimated_cost', 'shrinkage',
+  'spoilage', 'write off',
 ]
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -164,16 +191,18 @@ export function inspectWorkbook(buffer: ArrayBuffer): SheetInspection[] {
       }
     }
 
-    // Score each data type
-    // Sheet name match is weighted 2× (× 2 multiplier in the call)
-    const salesScore = scoreSheetName(name, SALES_NAMES) * 2 + scoreHeaders(headers, SALES_HEADERS)
-    const menuScore = scoreSheetName(name, MENU_NAMES) * 2 + scoreHeaders(headers, MENU_HEADERS)
-    const labourScore = scoreSheetName(name, LABOUR_NAMES) * 2 + scoreHeaders(headers, LABOUR_HEADERS)
+    // Score each data type (sheet name match weighted 2×)
+    const salesScore     = scoreSheetName(name, SALES_NAMES)     * 2 + scoreHeaders(headers, SALES_HEADERS)
+    const menuScore      = scoreSheetName(name, MENU_NAMES)      * 2 + scoreHeaders(headers, MENU_HEADERS)
+    const labourScore    = scoreSheetName(name, LABOUR_NAMES)    * 2 + scoreHeaders(headers, LABOUR_HEADERS)
+    const purchasesScore = scoreSheetName(name, PURCHASES_NAMES) * 2 + scoreHeaders(headers, PURCHASES_HEADERS)
+    const inventoryScore = scoreSheetName(name, INVENTORY_NAMES) * 2 + scoreHeaders(headers, INVENTORY_HEADERS)
+    const wasteScore     = scoreSheetName(name, WASTE_NAMES)     * 2 + scoreHeaders(headers, WASTE_HEADERS)
 
-    const maxScore = Math.max(salesScore, menuScore, labourScore)
+    const allScores = [salesScore, menuScore, labourScore, purchasesScore, inventoryScore, wasteScore]
+    const maxScore = Math.max(...allScores)
 
     if (maxScore === 0) {
-      // No evidence for any type — user must choose
       return {
         name,
         rowCount,
@@ -189,19 +218,23 @@ export function inspectWorkbook(buffer: ArrayBuffer): SheetInspection[] {
     let detectedType: SheetDetectedType
     let datasetType: DatasetType
 
-    if (salesScore >= menuScore && salesScore >= labourScore) {
-      detectedType = 'sales'
-      datasetType = 'restaurant_sales'
-    } else if (menuScore >= labourScore) {
-      detectedType = 'menu'
-      datasetType = 'restaurant_menu_items'
+    const winner = allScores.indexOf(maxScore)
+    if (winner === 0) {
+      detectedType = 'sales';      datasetType = 'restaurant_sales'
+    } else if (winner === 1) {
+      detectedType = 'menu';       datasetType = 'restaurant_menu_items'
+    } else if (winner === 2) {
+      detectedType = 'labour';     datasetType = 'restaurant_labour_shifts'
+    } else if (winner === 3) {
+      detectedType = 'purchases';  datasetType = 'restaurant_purchases'
+    } else if (winner === 4) {
+      detectedType = 'inventory';  datasetType = 'restaurant_inventory_counts'
     } else {
-      detectedType = 'labour'
-      datasetType = 'restaurant_labour_shifts'
+      detectedType = 'waste';      datasetType = 'restaurant_waste_adjustments'
     }
 
     // Confidence from score magnitude and gap over second-best
-    const scores = [salesScore, menuScore, labourScore].sort((a, b) => b - a)
+    const scores = allScores.slice().sort((a, b) => b - a)
     const gap = scores[0] - scores[1]
 
     let confidence: Confidence

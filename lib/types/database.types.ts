@@ -391,6 +391,133 @@ export type Database = {
         }
         Relationships: []
       }
+
+      // ── Phase 1–3: Cost Control tables ──────────────────────────────────────
+
+      restaurant_purchases: {
+        Row: {
+          id: string
+          organization_id: string
+          source_upload_id: string | null
+          purchase_date: string
+          supplier: string | null
+          item_name: string | null
+          item_category: string | null
+          outlet_name: string | null
+          quantity: number | null
+          unit_of_measure: string | null
+          unit_cost: number | null
+          total_cost: number | null
+          invoice_reference: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          organization_id: string
+          source_upload_id?: string | null
+          purchase_date: string
+          supplier?: string | null
+          item_name?: string | null
+          item_category?: string | null
+          outlet_name?: string | null
+          quantity?: number | null
+          unit_of_measure?: string | null
+          unit_cost?: number | null
+          total_cost?: number | null
+          invoice_reference?: string | null
+          created_at?: string
+        }
+        Update: {
+          purchase_date?: string
+          supplier?: string | null
+          item_name?: string | null
+          item_category?: string | null
+          total_cost?: number | null
+        }
+        Relationships: []
+      }
+
+      restaurant_inventory_counts: {
+        Row: {
+          id: string
+          organization_id: string
+          source_upload_id: string | null
+          count_date: string
+          item_name: string | null
+          item_category: string | null
+          outlet_name: string | null
+          opening_quantity: number | null
+          closing_quantity: number | null
+          unit_of_measure: string | null
+          unit_cost: number | null
+          opening_value: number | null
+          closing_value: number | null
+          count_reference: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          organization_id: string
+          source_upload_id?: string | null
+          count_date: string
+          item_name?: string | null
+          item_category?: string | null
+          outlet_name?: string | null
+          opening_quantity?: number | null
+          closing_quantity?: number | null
+          unit_of_measure?: string | null
+          unit_cost?: number | null
+          opening_value?: number | null
+          closing_value?: number | null
+          count_reference?: string | null
+          created_at?: string
+        }
+        Update: {
+          count_date?: string
+          item_name?: string | null
+          closing_value?: number | null
+        }
+        Relationships: []
+      }
+
+      restaurant_waste_adjustments: {
+        Row: {
+          id: string
+          organization_id: string
+          source_upload_id: string | null
+          waste_date: string
+          item_name: string | null
+          item_category: string | null
+          outlet_name: string | null
+          quantity_wasted: number | null
+          unit_of_measure: string | null
+          unit_cost: number | null
+          estimated_cost: number | null
+          waste_reason: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          organization_id: string
+          source_upload_id?: string | null
+          waste_date: string
+          item_name?: string | null
+          item_category?: string | null
+          outlet_name?: string | null
+          quantity_wasted?: number | null
+          unit_of_measure?: string | null
+          unit_cost?: number | null
+          estimated_cost?: number | null
+          waste_reason?: string | null
+          created_at?: string
+        }
+        Update: {
+          waste_date?: string
+          item_name?: string | null
+          estimated_cost?: number | null
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never

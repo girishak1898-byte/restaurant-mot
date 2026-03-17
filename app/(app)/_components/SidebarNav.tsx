@@ -2,11 +2,12 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { LayoutDashboard, Upload, FolderOpen, ShieldCheck } from 'lucide-react'
+import { LayoutDashboard, Upload, FolderOpen, ShieldCheck, Package } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 const NAV_ITEMS = [
   { href: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
+  { href: '/cost-control', icon: Package, label: 'Cost Control' },
   { href: '/upload', icon: Upload, label: 'Import data' },
   { href: '/uploads', icon: FolderOpen, label: 'My files' },
 ]

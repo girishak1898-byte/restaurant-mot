@@ -4,7 +4,7 @@ import { useRef, useState } from 'react'
 import {
   CheckCircle2, ChefHat, ClipboardList, Users, Upload,
   AlertCircle, ArrowLeft, ArrowRight, Layers, SkipForward,
-  FileText, HelpCircle,
+  FileText, HelpCircle, Receipt, Package, Trash2,
 } from 'lucide-react'
 import { parseFile, parseSheet, type ParseResult } from '@/lib/upload/parse'
 import { inspectWorkbook, type SheetInspection, type Confidence } from '@/lib/upload/workbook'
@@ -50,6 +50,9 @@ const DATASET_ICONS: Record<DatasetType, React.ReactNode> = {
   restaurant_sales: <ChefHat className="h-5 w-5" />,
   restaurant_menu_items: <ClipboardList className="h-5 w-5" />,
   restaurant_labour_shifts: <Users className="h-5 w-5" />,
+  restaurant_purchases: <Receipt className="h-5 w-5" />,
+  restaurant_inventory_counts: <Package className="h-5 w-5" />,
+  restaurant_waste_adjustments: <Trash2 className="h-5 w-5" />,
 }
 
 // ── Utilities ────────────────────────────────────────────────────────────────
@@ -125,10 +128,13 @@ function StepIndicator({ current, isMultiSheet }: { current: Step; isMultiSheet:
 // ── Sheet type badge helpers ─────────────────────────────────────────────────
 
 const TYPE_BADGE: Record<string, { label: string; className: string }> = {
-  sales:  { label: 'Sales',  className: 'bg-blue-50 border-blue-200 text-blue-700' },
-  menu:   { label: 'Menu',   className: 'bg-amber-50 border-amber-200 text-amber-700' },
-  labour: { label: 'Labour', className: 'bg-purple-50 border-purple-200 text-purple-700' },
-  skip:   { label: 'Info sheet', className: 'bg-muted border-border text-muted-foreground' },
+  sales:     { label: 'Sales',      className: 'bg-blue-50 border-blue-200 text-blue-700' },
+  menu:      { label: 'Menu',       className: 'bg-amber-50 border-amber-200 text-amber-700' },
+  labour:    { label: 'Labour',     className: 'bg-purple-50 border-purple-200 text-purple-700' },
+  purchases: { label: 'Purchases',  className: 'bg-emerald-50 border-emerald-200 text-emerald-700' },
+  inventory: { label: 'Inventory',  className: 'bg-cyan-50 border-cyan-200 text-cyan-700' },
+  waste:     { label: 'Waste',      className: 'bg-rose-50 border-rose-200 text-rose-700' },
+  skip:      { label: 'Info sheet', className: 'bg-muted border-border text-muted-foreground' },
 }
 
 const CONFIDENCE_BADGE: Record<Confidence, { label: string; className: string }> = {
@@ -348,7 +354,14 @@ function PreviewStep({
   onNext: () => void
   sheetContext?: { current: number; total: number; name: string } | null
 }) {
-  const types: DatasetType[] = ['restaurant_sales', 'restaurant_menu_items', 'restaurant_labour_shifts']
+  const types: DatasetType[] = [
+    'restaurant_sales',
+    'restaurant_menu_items',
+    'restaurant_labour_shifts',
+    'restaurant_purchases',
+    'restaurant_inventory_counts',
+    'restaurant_waste_adjustments',
+  ]
 
   return (
     <div className="space-y-6">
