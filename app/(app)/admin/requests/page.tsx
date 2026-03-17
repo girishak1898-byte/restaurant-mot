@@ -68,12 +68,17 @@ export default async function AdminRequestsPage() {
         <td className="px-5 py-3.5">
           <StatusBadge status={request.status} />
         </td>
-        <td className="px-5 py-3.5 text-xs text-muted-foreground">
-          {new Date(request.created_at).toLocaleDateString('en-GB', {
-            day: 'numeric',
-            month: 'short',
-            year: 'numeric',
-          })}
+        <td className="px-5 py-3.5">
+          <p className="text-xs text-muted-foreground">
+            {new Date(request.created_at).toLocaleDateString('en-GB', {
+              day: 'numeric',
+              month: 'short',
+              year: 'numeric',
+            })}
+          </p>
+          <p className="text-[11px] text-muted-foreground/60 mt-0.5">
+            {relativeTime(request.created_at)}
+          </p>
         </td>
         {showActions ? (
           <td className="px-5 py-3.5 text-right">
@@ -118,8 +123,9 @@ export default async function AdminRequestsPage() {
         </div>
 
         {pending.length === 0 ? (
-          <div className="rounded-xl border border-border bg-card p-10 text-center">
-            <p className="text-sm text-muted-foreground">No pending requests. All clear.</p>
+          <div className="rounded-xl border border-dashed border-border bg-card/50 p-10 text-center">
+            <p className="text-sm font-medium text-foreground">All clear</p>
+            <p className="text-xs text-muted-foreground mt-1">No upgrade requests waiting for review.</p>
           </div>
         ) : (
           <div className="rounded-xl border border-border bg-card shadow-sm overflow-hidden">
@@ -153,6 +159,19 @@ export default async function AdminRequestsPage() {
       )}
     </div>
   )
+}
+
+function relativeTime(dateStr: string) {
+  const diff = Date.now() - new Date(dateStr).getTime()
+  const minutes = Math.floor(diff / 60_000)
+  if (minutes < 60) return `${minutes}m ago`
+  const hours = Math.floor(minutes / 60)
+  if (hours < 24) return `${hours}h ago`
+  const days = Math.floor(hours / 24)
+  if (days === 1) return 'yesterday'
+  if (days < 30) return `${days} days ago`
+  const months = Math.floor(days / 30)
+  return `${months}mo ago`
 }
 
 function StatusBadge({ status }: { status: string }) {

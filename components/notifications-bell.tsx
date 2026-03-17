@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useTransition } from 'react'
-import { Bell, CheckCheck, X } from 'lucide-react'
+import { Bell, CheckCheck, X, CheckCircle2, XCircle } from 'lucide-react'
 import { markNotificationRead, markAllNotificationsRead } from '@/lib/actions/admin'
 import { cn } from '@/lib/utils'
 
@@ -17,6 +17,28 @@ interface Notification {
 interface NotificationsBellProps {
   notifications: Notification[]
   userId: string
+}
+
+function NotificationIcon({ type }: { type: string }) {
+  if (type === 'plan_approved') {
+    return (
+      <div className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-emerald-100 border border-emerald-200">
+        <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
+      </div>
+    )
+  }
+  if (type === 'plan_rejected') {
+    return (
+      <div className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-red-50 border border-red-200">
+        <XCircle className="h-3.5 w-3.5 text-red-500" />
+      </div>
+    )
+  }
+  return (
+    <div className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-muted border border-border">
+      <Bell className="h-3.5 w-3.5 text-muted-foreground" />
+    </div>
+  )
 }
 
 export function NotificationsBell({ notifications, userId }: NotificationsBellProps) {
@@ -56,23 +78,30 @@ export function NotificationsBell({ notifications, userId }: NotificationsBellPr
           {/* Backdrop */}
           <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
 
-          {/* Panel */}
+          {/* Panel — opens upward from the sidebar button */}
           <div className="absolute bottom-full left-0 z-50 mb-2 w-80 rounded-xl border border-border bg-card shadow-xl overflow-hidden">
             <div className="flex items-center justify-between px-4 py-3 border-b border-border">
-              <p className="text-[13px] font-semibold">Notifications</p>
               <div className="flex items-center gap-2">
+                <p className="text-[13px] font-semibold">Notifications</p>
+                {unread > 0 && (
+                  <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[10px] font-semibold text-primary-foreground">
+                    {unread}
+                  </span>
+                )}
+              </div>
+              <div className="flex items-center gap-1">
                 {unread > 0 && (
                   <button
                     onClick={handleMarkAllRead}
-                    className="flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground transition-colors"
+                    className="flex items-center gap-1 rounded-md px-2 py-1 text-[11px] text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
                   >
-                    <CheckCheck className="h-3.5 w-3.5" />
+                    <CheckCheck className="h-3 w-3" />
                     Mark all read
                   </button>
                 )}
                 <button
                   onClick={() => setOpen(false)}
-                  className="text-muted-foreground hover:text-foreground transition-colors"
+                  className="rounded-md p-1 text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
                 >
                   <X className="h-3.5 w-3.5" />
                 </button>
@@ -81,7 +110,12 @@ export function NotificationsBell({ notifications, userId }: NotificationsBellPr
 
             <div className="max-h-80 overflow-y-auto">
               {items.length === 0 ? (
-                <p className="py-8 text-center text-xs text-muted-foreground">No notifications yet</p>
+                <div className="flex flex-col items-center py-10 px-4 text-center">
+                  <div className="mb-3 flex h-8 w-8 items-center justify-center rounded-full bg-muted border border-border">
+                    <Bell className="h-4 w-4 text-muted-foreground" />
+                  </div>
+                  <p className="text-xs text-muted-foreground">No notifications yet</p>
+                </div>
               ) : (
                 items.map((n) => (
                   <div
@@ -91,15 +125,19 @@ export function NotificationsBell({ notifications, userId }: NotificationsBellPr
                       !n.read && 'bg-primary/5'
                     )}
                   >
+                    <NotificationIcon type={n.type} />
+
                     <div className="flex-1 min-w-0">
-                      <div className="flex items-start gap-2">
-                        {!n.read && (
-                          <span className="mt-1.5 h-1.5 w-1.5 rounded-full bg-primary shrink-0" />
-                        )}
-                        <div className={cn(!n.read ? '' : 'pl-3.5')}>
-                          <p className="text-[12px] font-semibold text-foreground leading-tight">
-                            {n.title}
-                          </p>
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-1.5">
+                            {!n.read && (
+                              <span className="h-1.5 w-1.5 rounded-full bg-primary shrink-0" />
+                            )}
+                            <p className="text-[12px] font-semibold text-foreground leading-tight truncate">
+                              {n.title}
+                            </p>
+                          </div>
                           <p className="text-[11px] text-muted-foreground leading-relaxed mt-0.5">
                             {n.message}
                           </p>
@@ -111,16 +149,17 @@ export function NotificationsBell({ notifications, userId }: NotificationsBellPr
                             })}
                           </p>
                         </div>
+                        {!n.read && (
+                          <button
+                            onClick={() => handleMarkRead(n.id)}
+                            className="shrink-0 rounded-md p-1 text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                            title="Mark as read"
+                          >
+                            <X className="h-3 w-3" />
+                          </button>
+                        )}
                       </div>
                     </div>
-                    {!n.read && (
-                      <button
-                        onClick={() => handleMarkRead(n.id)}
-                        className="shrink-0 text-[10px] text-muted-foreground hover:text-foreground mt-0.5 transition-colors"
-                      >
-                        Dismiss
-                      </button>
-                    )}
                   </div>
                 ))
               )}
