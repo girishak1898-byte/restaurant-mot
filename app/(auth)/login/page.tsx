@@ -31,8 +31,8 @@ export default function LoginPage() {
   return (
     <div className="w-full max-w-sm">
       <div className="text-center mb-6">
-        <h1 className="text-[15px] font-semibold tracking-tight">Restaurant MOT</h1>
-        <p className="text-sm text-muted-foreground mt-1">Know your numbers. Run a tighter kitchen.</p>
+        <h1 className="text-[15px] font-semibold tracking-tight">Northline</h1>
+        <p className="text-sm text-muted-foreground mt-1">Know your numbers. Stay on course.</p>
       </div>
 
       <Card>

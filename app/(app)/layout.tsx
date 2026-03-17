@@ -31,7 +31,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   const displayName = user.user_metadata?.full_name || user.email || 'User'
   const modeLabel =
-    org?.mode === 'restaurant' ? 'Restaurant' : org?.mode ? org.mode : 'Restaurant'
+    org?.mode === 'restaurant' ? 'Northline for Restaurants' : org?.mode ? org.mode : 'Northline'
 
   return (
     <div className="flex h-screen overflow-hidden bg-background">

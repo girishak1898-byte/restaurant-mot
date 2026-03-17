@@ -13,8 +13,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: 'Restaurant MOT',
-  description: 'Restaurant analytics from your existing data.',
+  title: 'Northline',
+  description: 'Know your numbers. Stay on course.',
 };
 
 export default function RootLayout({
