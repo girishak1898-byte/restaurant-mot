@@ -24,7 +24,15 @@ const PARTICLES: { x: string; y: string; delay: string; size: string }[] = [
 ]
 
 export function PremiumUnlockModal({ notificationIds }: PremiumUnlockModalProps) {
-  const [open, setOpen] = useState(notificationIds.length > 0)
+  const [open, setOpen] = useState(() => {
+    // Check sessionStorage first so remounts during the async mark-read
+    // race condition can't reopen the modal.
+    if (typeof window !== 'undefined' &&
+        sessionStorage.getItem('premium_unlock_dismissed') === 'true') {
+      return false
+    }
+    return notificationIds.length > 0
+  })
   const [animate, setAnimate] = useState(false)
   const [, startTransition] = useTransition()
   const router = useRouter()
@@ -37,20 +45,22 @@ export function PremiumUnlockModal({ notificationIds }: PremiumUnlockModalProps)
     }
   }, [open])
 
-  function dismiss() {
+  function dismiss(destination?: string) {
     setOpen(false)
-    // Mark all unlock notifications as read so modal never re-shows
+    // Guard against remounts before the server action completes
+    sessionStorage.setItem('premium_unlock_dismissed', 'true')
+    // Mark all unlock notifications as read so server state catches up
     startTransition(() => {
       for (const id of notificationIds) {
         void markNotificationRead(id)
       }
     })
-    router.refresh()
-  }
-
-  function explorePremium() {
-    dismiss()
-    router.push('/dashboard')
+    if (destination) {
+      router.push(destination)
+    } else {
+      // No navigation — refresh so the layout re-checks notification state
+      router.refresh()
+    }
   }
 
   if (!open) return null
@@ -70,7 +80,7 @@ export function PremiumUnlockModal({ notificationIds }: PremiumUnlockModalProps)
 
       <div
         className="fixed inset-0 z-50 flex items-center justify-center p-4"
-        onClick={dismiss}
+        onClick={() => dismiss()}
       >
         <div className="absolute inset-0 bg-black/40 backdrop-blur-[2px]" />
 
@@ -113,13 +123,13 @@ export function PremiumUnlockModal({ notificationIds }: PremiumUnlockModalProps)
 
             <div className="flex flex-col gap-2.5">
               <button
-                onClick={explorePremium}
+                onClick={() => dismiss('/dashboard')}
                 className="inline-flex items-center justify-center rounded-lg bg-primary px-5 py-2.5 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors"
               >
                 Explore Premium
               </button>
               <button
-                onClick={dismiss}
+                onClick={() => dismiss('/dashboard')}
                 className="inline-flex items-center justify-center rounded-lg border border-border bg-background px-5 py-2 text-sm font-medium text-foreground hover:bg-muted transition-colors"
               >
                 Go to dashboard
