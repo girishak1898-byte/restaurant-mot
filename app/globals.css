@@ -65,8 +65,8 @@
   --popover: oklch(1 0 0);
   --popover-foreground: oklch(0.13 0.012 255);
 
-  /* ── Single brand accent — indigo, professional & trustworthy ── */
-  --primary: oklch(0.455 0.165 264);
+  /* ── Single brand accent — deep indigo, professional & trustworthy ── */
+  --primary: oklch(0.43 0.185 264);
   --primary-foreground: oklch(0.985 0 0);
 
   /* ── Secondary & muted — cool soft grays ── */
@@ -83,10 +83,10 @@
   /* ── Borders & inputs ── */
   --border: oklch(0.894 0.008 250);
   --input: oklch(0.894 0.008 250);
-  --ring: oklch(0.455 0.165 264);
+  --ring: oklch(0.43 0.185 264);
 
   /* ── Chart palette — indigo primary + teal, amber, violet, rose ── */
-  --chart-1: oklch(0.455 0.165 264);
+  --chart-1: oklch(0.43 0.185 264);
   --chart-2: oklch(0.50 0.148 178);
   --chart-3: oklch(0.62 0.175 55);
   --chart-4: oklch(0.52 0.158 300);
@@ -97,12 +97,12 @@
   /* ── Sidebar — dark charcoal with subtle blue-black tint ── */
   --sidebar: oklch(0.152 0.014 255);
   --sidebar-foreground: oklch(0.82 0.01 255);
-  --sidebar-primary: oklch(0.455 0.165 264);
+  --sidebar-primary: oklch(0.43 0.185 264);
   --sidebar-primary-foreground: oklch(0.985 0 0);
   --sidebar-accent: oklch(0.222 0.014 255);
   --sidebar-accent-foreground: oklch(0.93 0 0);
   --sidebar-border: oklch(0.23 0.012 255);
-  --sidebar-ring: oklch(0.455 0.165 264);
+  --sidebar-ring: oklch(0.43 0.185 264);
 }
 
 .dark {

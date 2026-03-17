@@ -3,6 +3,7 @@
 import { useActionState, useEffect, useState } from 'react'
 import { useFormStatus } from 'react-dom'
 import { ChefHat, Building2 } from 'lucide-react'
+import { NMark } from '@/components/brand/mark'
 import { createOrganization } from '@/lib/actions/onboarding'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -48,8 +49,13 @@ export default function OnboardingPage() {
     <div className="min-h-screen flex items-center justify-center bg-muted/40 p-4">
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
-          <h1 className="text-2xl font-semibold tracking-tight font-heading">Northline</h1>
-          <p className="text-muted-foreground mt-1 text-sm">Let&apos;s set up your workspace</p>
+          <div className="flex items-center justify-center gap-2 mb-2">
+            <div className="h-7 w-7 rounded-lg bg-primary flex items-center justify-center shrink-0">
+              <NMark className="h-4 w-4 text-primary-foreground" />
+            </div>
+            <span className="text-xl font-semibold tracking-tight">Northline</span>
+          </div>
+          <p className="text-muted-foreground text-sm">Let&apos;s set up your workspace</p>
         </div>
 
         <Card>

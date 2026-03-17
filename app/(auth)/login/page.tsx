@@ -3,6 +3,7 @@
 import { useActionState } from 'react'
 import { useFormStatus } from 'react-dom'
 import Link from 'next/link'
+import { NMark } from '@/components/brand/mark'
 import { signIn } from '@/lib/actions/auth'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -31,8 +32,13 @@ export default function LoginPage() {
   return (
     <div className="w-full max-w-sm">
       <div className="text-center mb-6">
-        <h1 className="text-2xl font-semibold tracking-tight font-heading">Northline</h1>
-        <p className="text-sm text-muted-foreground mt-1">Know your numbers. Stay on course.</p>
+        <div className="flex items-center justify-center gap-2 mb-2">
+          <div className="h-7 w-7 rounded-lg bg-primary flex items-center justify-center shrink-0">
+            <NMark className="h-4 w-4 text-primary-foreground" />
+          </div>
+          <span className="text-xl font-semibold tracking-tight">Northline</span>
+        </div>
+        <p className="text-sm text-muted-foreground">Know your numbers. Stay on course.</p>
       </div>
 
       <Card>

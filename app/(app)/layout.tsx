@@ -4,6 +4,7 @@ import { ChefHat, LogOut } from 'lucide-react'
 import { createClient } from '@/lib/supabase/server'
 import { signOut } from '@/lib/actions/auth'
 import { SidebarNav } from './_components/SidebarNav'
+import { NMark } from '@/components/brand/mark'
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const supabase = await createClient()
@@ -74,6 +75,16 @@ export default async function AppLayout({ children }: { children: React.ReactNod
               Sign out
             </button>
           </form>
+        </div>
+
+        {/* Northline brand stamp */}
+        <div className="px-3.5 pb-3 pt-2">
+          <div className="flex items-center gap-1.5 opacity-25">
+            <NMark className="h-3 w-3 text-sidebar-foreground" />
+            <span className="text-[10px] font-semibold tracking-[0.12em] text-sidebar-foreground uppercase">
+              Northline
+            </span>
+          </div>
         </div>
       </aside>
 

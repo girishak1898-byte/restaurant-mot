@@ -1,6 +1,5 @@
 import Link from 'next/link'
 import {
-  Navigation,
   ChefHat,
   CheckCircle2,
   TrendingUp,
@@ -14,6 +13,7 @@ import {
   ArrowRight,
   Layers,
 } from 'lucide-react'
+import { NMark } from '@/components/brand/mark'
 
 // ── Shared primitives ─────────────────────────────────────────────────────────
 
@@ -41,7 +41,7 @@ function Navbar() {
       <div className="max-w-6xl mx-auto px-6 h-14 flex items-center justify-between">
         <Link href="/" className="flex items-center gap-2">
           <div className="h-6 w-6 rounded-md bg-primary flex items-center justify-center shrink-0">
-            <Navigation className="h-3.5 w-3.5 text-primary-foreground" />
+            <NMark className="h-3.5 w-3.5 text-primary-foreground" />
           </div>
           <span className="font-semibold text-[15px] tracking-tight">Northline</span>
         </Link>
@@ -507,7 +507,7 @@ function Footer() {
           <div className="max-w-xs">
             <div className="flex items-center gap-2 mb-2">
               <div className="h-5 w-5 rounded-md bg-primary flex items-center justify-center shrink-0">
-                <Navigation className="h-3 w-3 text-primary-foreground" />
+                <NMark className="h-3 w-3 text-primary-foreground" />
               </div>
               <span className="font-semibold text-sm tracking-tight">Northline</span>
             </div>
