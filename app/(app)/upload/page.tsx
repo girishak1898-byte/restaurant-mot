@@ -499,7 +499,7 @@ function DoneStep({
       </div>
       <div className="flex justify-center gap-3 pt-2">
         <Button onClick={onReset} variant="outline">
-          Import another file
+          Upload another file
         </Button>
         <Button asChild variant="outline">
           <a href="/uploads">View my files</a>

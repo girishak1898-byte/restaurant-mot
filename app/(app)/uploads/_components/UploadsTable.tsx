@@ -214,14 +214,14 @@ function UploadRow({
                 disabled={isPending}
                 className="text-xs font-medium text-red-600 hover:text-red-700 underline underline-offset-2 disabled:opacity-50"
               >
-                {isPending ? 'Deleting…' : 'Delete file'}
+                {isPending ? 'Deleting…' : 'Yes, delete'}
               </button>
             </div>
           ) : (
             <button
               onClick={() => setConfirming(true)}
               className="p-1.5 rounded text-muted-foreground hover:text-red-600 hover:bg-red-50 transition-colors"
-              title="Delete this file and all its imported rows"
+              title="Delete file"
             >
               <Trash2 className="h-4 w-4" />
             </button>
