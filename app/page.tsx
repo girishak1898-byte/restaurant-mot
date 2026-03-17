@@ -429,10 +429,10 @@ function Pricing() {
           </p>
         </div>
         <Link
-          href="#"
-          className="inline-flex items-center gap-2 rounded-lg border border-border bg-background text-foreground font-medium px-5 py-2.5 text-sm hover:bg-muted transition-colors"
+          href="/signup"
+          className="inline-flex items-center gap-2 rounded-lg bg-primary text-primary-foreground font-medium px-5 py-2.5 text-sm hover:bg-primary/90 transition-colors"
         >
-          View pricing
+          Start free trial
           <ArrowRight className="h-3.5 w-3.5" />
         </Link>
       </div>

@@ -214,7 +214,7 @@ function UploadRow({
                 disabled={isPending}
                 className="text-xs font-medium text-red-600 hover:text-red-700 underline underline-offset-2 disabled:opacity-50"
               >
-                {isPending ? 'Deleting…' : 'Yes, delete'}
+                {isPending ? 'Deleting…' : 'Delete file'}
               </button>
             </div>
           ) : (
