@@ -278,6 +278,8 @@ export default async function DashboardPage() {
 
   const hasData = overview && (overview.total_net > 0 || overview.total_gross > 0)
   const hasLabour = labourOverview && labourOverview.total_labour > 0
+  // Show dashboard shell when ANY data exists — not just sales
+  const hasAnyData = !!hasData || !!hasLabour
 
   const labourPct =
     hasLabour && overview && overview.total_net > 0
@@ -316,7 +318,7 @@ export default async function DashboardPage() {
         </div>
       </div>
 
-      {!hasData ? (
+      {!hasAnyData ? (
         <EmptyState />
       ) : (
         <>
@@ -349,7 +351,7 @@ export default async function DashboardPage() {
           )}
 
           {/* ── Revenue ────────────────────────────────────────────── */}
-          <Section title="Revenue">
+          {hasData && <Section title="Revenue">
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-3.5 mb-6">
               <MetricCard
                 label="Net Revenue"
@@ -409,7 +411,7 @@ export default async function DashboardPage() {
                 />
               </ChartCard>
             </div>
-          </Section>
+          </Section>}
 
           {/* ── Prime Cost ─────────────────────────────────────────── */}
           <Section title="Prime cost">

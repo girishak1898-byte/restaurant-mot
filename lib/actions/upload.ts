@@ -48,7 +48,16 @@ function coerceRow(
         break
       }
       case 'date': {
-        const d = new Date(raw)
+        // Normalise DD/MM/YYYY and DD-MM-YYYY (UK/EU format) → YYYY-MM-DD before parsing.
+        // JS Date constructor doesn't recognise DD/MM/YYYY; it misreads or rejects it.
+        let normalised = raw
+        const parts = raw.match(/^(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{2,4})$/)
+        if (parts) {
+          const [, d, m, y] = parts
+          const year = y.length === 2 ? (parseInt(y) >= 50 ? `19${y}` : `20${y}`) : y
+          normalised = `${year}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`
+        }
+        const d = new Date(normalised)
         if (!isNaN(d.getTime())) result[field.key] = d.toISOString().split('T')[0]
         break
       }

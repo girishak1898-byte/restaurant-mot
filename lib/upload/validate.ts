@@ -13,8 +13,16 @@ export interface ValidationResult {
 }
 
 function isValidDate(value: string): boolean {
-  const d = new Date(value)
-  return !isNaN(d.getTime())
+  // Normalise DD/MM/YYYY and DD-MM-YYYY (UK/EU) → YYYY-MM-DD before parsing,
+  // matching the server-side coerceRow behaviour.
+  let normalised = value
+  const parts = value.match(/^(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{2,4})$/)
+  if (parts) {
+    const [, d, m, y] = parts
+    const year = y.length === 2 ? (parseInt(y) >= 50 ? `19${y}` : `20${y}`) : y
+    normalised = `${year}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`
+  }
+  return !isNaN(new Date(normalised).getTime())
 }
 
 function isValidNumber(value: string): boolean {
