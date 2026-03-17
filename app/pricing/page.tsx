@@ -1,6 +1,8 @@
 import Link from 'next/link'
 import { Check, Minus, ArrowRight, TrendingUp, PieChart, Users, Lightbulb, BarChart3 } from 'lucide-react'
 import { NMark } from '@/components/brand/mark'
+import { createClient } from '@/lib/supabase/server'
+import { PricingContactSalesButton } from './_components/PricingContactSalesButton'
 
 // ── Design primitives ──────────────────────────────────────────────────────────
 
@@ -467,7 +469,7 @@ function ROISection() {
 
 // ── Contact Sales ──────────────────────────────────────────────────────────────
 
-function ContactSalesSection() {
+function ContactSalesSection({ orgId }: { orgId: string | null }) {
   return (
     <section id="contact" className="py-20 px-6 bg-muted/30 border-t border-border">
       <div className="max-w-2xl mx-auto text-center">
@@ -480,13 +482,7 @@ function ContactSalesSection() {
           can help. We'll review your setup and help you decide what makes sense for your operation.
         </p>
         <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
-          <Link
-            href="/dashboard"
-            className="inline-flex items-center gap-2 rounded-lg bg-primary text-primary-foreground font-medium px-6 py-2.5 text-sm hover:bg-primary/90 transition-colors"
-          >
-            Contact Sales
-            <ArrowRight className="h-3.5 w-3.5" />
-          </Link>
+          <PricingContactSalesButton orgId={orgId} />
           <Link
             href="/signup"
             className="inline-flex items-center gap-2 rounded-lg border border-border bg-card text-foreground font-medium px-6 py-2.5 text-sm hover:bg-muted transition-colors"
@@ -577,7 +573,21 @@ function Footer() {
 
 // ── Page ──────────────────────────────────────────────────────────────────────
 
-export default function PricingPage() {
+export default async function PricingPage() {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+
+  let orgId: string | null = null
+  if (user) {
+    const { data: membership } = await supabase
+      .from('organization_memberships')
+      .select('organization_id')
+      .eq('user_id', user.id)
+      .limit(1)
+      .single()
+    orgId = membership?.organization_id ?? null
+  }
+
   return (
     <div className="min-h-screen bg-background">
       <Navbar />
@@ -588,7 +598,7 @@ export default function PricingPage() {
         <ConversionSection />
         <WhatPremiumUnlocks />
         <ROISection />
-        <ContactSalesSection />
+        <ContactSalesSection orgId={orgId} />
         <FinalCTA />
       </main>
       <Footer />
