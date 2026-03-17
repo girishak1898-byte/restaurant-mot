@@ -3,11 +3,24 @@
 import { useState, useTransition } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { Trash2, ChevronDown, ChevronRight, AlertCircle, CheckCircle2, Clock, Loader2, FileText, XCircle } from 'lucide-react'
+import {
+  Trash2, ChevronDown, ChevronRight, AlertCircle, CheckCircle2,
+  Clock, Loader2, FileText, XCircle, Layers,
+} from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { deleteUpload } from '@/lib/actions/uploads-management'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
+
+export interface ImportJob {
+  target_table: string
+  sheet_name: string | null
+  rows_total: number
+  rows_imported: number
+  rows_failed: number
+  status: string
+  error_log: { errors?: string[] } | null
+}
 
 export interface UploadRow {
   id: string
@@ -16,14 +29,7 @@ export interface UploadRow {
   file_size_bytes: number | null
   status: string
   created_at: string
-  import_jobs: {
-    target_table: string
-    rows_total: number
-    rows_imported: number
-    rows_failed: number
-    status: string
-    error_log: { errors?: string[] } | null
-  } | null
+  import_jobs: ImportJob[]
 }
 
 // ── Labels ────────────────────────────────────────────────────────────────────
@@ -80,52 +86,50 @@ function formatDate(iso: string) {
 
 // ── Toast ─────────────────────────────────────────────────────────────────────
 
-function Toast({
-  message,
-  type,
-  onDismiss,
-}: {
-  message: string
-  type: 'success' | 'error'
-  onDismiss: () => void
-}) {
+function Toast({ message, type, onDismiss }: { message: string; type: 'success' | 'error'; onDismiss: () => void }) {
   return (
-    <div
-      className={cn(
-        'flex items-center gap-3 rounded-lg border px-4 py-3 text-sm mb-4',
-        type === 'success' && 'bg-green-50 border-green-200 text-green-800',
-        type === 'error' && 'bg-red-50 border-red-200 text-red-800'
-      )}
-    >
+    <div className={cn(
+      'flex items-center gap-3 rounded-lg border px-4 py-3 text-sm mb-4',
+      type === 'success' && 'bg-green-50 border-green-200 text-green-800',
+      type === 'error' && 'bg-red-50 border-red-200 text-red-800'
+    )}>
       {type === 'success' ? (
         <CheckCircle2 className="h-4 w-4 shrink-0" />
       ) : (
         <AlertCircle className="h-4 w-4 shrink-0" />
       )}
       <span className="flex-1">{message}</span>
-      <button onClick={onDismiss} className="text-current opacity-60 hover:opacity-100 text-lg leading-none">
-        ×
-      </button>
+      <button onClick={onDismiss} className="text-current opacity-60 hover:opacity-100 text-lg leading-none">×</button>
     </div>
   )
 }
 
 // ── Row ───────────────────────────────────────────────────────────────────────
 
-function UploadRow({
-  row,
-  onDeleted,
-}: {
-  row: UploadRow
-  onDeleted: (id: string) => void
-}) {
+function UploadRow({ row, onDeleted }: { row: UploadRow; onDeleted: (id: string) => void }) {
   const [expanded, setExpanded] = useState(false)
   const [confirming, setConfirming] = useState(false)
   const [isPending, startTransition] = useTransition()
 
-  const job = row.import_jobs
-  const datasetLabel = job ? (DATASET_LABELS[job.target_table] ?? job.target_table) : '—'
-  const displayStatus = job?.status ?? row.status
+  const jobs = row.import_jobs
+  const isWorkbook = jobs.length > 1
+  const hasJobs = jobs.length > 0
+
+  // Display label for the data type column
+  const dataTypeLabel = isWorkbook
+    ? `Workbook · ${jobs.length} sheets`
+    : jobs.length === 1
+    ? (DATASET_LABELS[jobs[0].target_table] ?? jobs[0].target_table)
+    : '—'
+
+  // Aggregate status: upload-level status when done/error, otherwise job status
+  const displayStatus = row.status === 'done' || row.status === 'error'
+    ? row.status
+    : (jobs[0]?.status ?? row.status)
+
+  // Aggregate row counts
+  const totalImported = jobs.reduce((s, j) => s + (j.rows_imported ?? 0), 0)
+  const totalFailed = jobs.reduce((s, j) => s + (j.rows_failed ?? 0), 0)
 
   function handleDelete() {
     startTransition(async () => {
@@ -144,7 +148,7 @@ function UploadRow({
       <tr className="hover:bg-muted/30 border-b last:border-b-0">
         {/* Expand toggle */}
         <td className="py-3 pl-4 w-8">
-          {job && (
+          {hasJobs && (
             <button
               onClick={() => setExpanded(!expanded)}
               className="text-muted-foreground hover:text-foreground"
@@ -158,7 +162,10 @@ function UploadRow({
         {/* File name */}
         <td className="py-3 pr-4">
           <div className="flex items-center gap-2">
-            <FileText className="h-4 w-4 text-muted-foreground shrink-0" />
+            {isWorkbook
+              ? <Layers className="h-4 w-4 text-muted-foreground shrink-0" />
+              : <FileText className="h-4 w-4 text-muted-foreground shrink-0" />
+            }
             <span className="text-sm font-medium truncate max-w-[220px]" title={row.file_name}>
               {row.file_name}
             </span>
@@ -166,7 +173,7 @@ function UploadRow({
         </td>
 
         {/* Dataset type */}
-        <td className="py-3 pr-4 text-sm text-muted-foreground">{datasetLabel}</td>
+        <td className="py-3 pr-4 text-sm text-muted-foreground">{dataTypeLabel}</td>
 
         {/* Upload date */}
         <td className="py-3 pr-4 text-sm text-muted-foreground whitespace-nowrap">
@@ -180,11 +187,11 @@ function UploadRow({
 
         {/* Rows imported / skipped */}
         <td className="py-3 pr-4 text-sm text-right">
-          {job ? (
+          {hasJobs ? (
             <span>
-              <span className="font-medium">{job.rows_imported.toLocaleString()}</span>
-              {job.rows_failed > 0 && (
-                <span className="text-muted-foreground"> / {job.rows_failed.toLocaleString()} skipped</span>
+              <span className="font-medium">{totalImported.toLocaleString()}</span>
+              {totalFailed > 0 && (
+                <span className="text-muted-foreground"> / {totalFailed.toLocaleString()} skipped</span>
               )}
             </span>
           ) : (
@@ -230,40 +237,78 @@ function UploadRow({
       </tr>
 
       {/* Expanded detail row */}
-      {expanded && job && (
+      {expanded && hasJobs && (
         <tr className="bg-muted/20 border-b">
           <td />
           <td colSpan={7} className="py-3 pr-4 pl-10">
-            <div className="text-xs space-y-1 text-muted-foreground">
-              <p>
-                <span className="font-medium text-foreground">Dataset type:</span>{' '}
-                {DATASET_LABELS[job.target_table] ?? job.target_table}
-              </p>
-              <p>
-                <span className="font-medium text-foreground">Total rows in file:</span>{' '}
-                {job.rows_total.toLocaleString()}
-              </p>
-              <p>
-                <span className="font-medium text-foreground">Rows imported successfully:</span>{' '}
-                <span className="text-green-700">{job.rows_imported.toLocaleString()}</span>
-              </p>
-              {job.rows_failed > 0 && (
-                <p>
-                  <span className="font-medium text-foreground">Rows skipped:</span>{' '}
-                  <span className="text-amber-700">{job.rows_failed.toLocaleString()}</span>
+            {isWorkbook ? (
+              // Multi-sheet breakdown
+              <div className="space-y-3">
+                <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+                  Sheet results
                 </p>
-              )}
-              {job.error_log?.errors && job.error_log.errors.length > 0 && (
-                <div className="mt-2 p-2 bg-red-50 border border-red-100 rounded text-red-700">
-                  <p className="font-medium mb-1">Import errors:</p>
-                  <ul className="space-y-0.5 list-disc list-inside">
-                    {job.error_log.errors.slice(0, 3).map((e, i) => (
-                      <li key={i}>{e}</li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-            </div>
+                {jobs.map((job, i) => (
+                  <div key={i} className="flex items-start gap-3 text-xs">
+                    <FileText className="h-3.5 w-3.5 text-muted-foreground shrink-0 mt-0.5" />
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-medium text-foreground">
+                          {job.sheet_name ?? `Sheet ${i + 1}`}
+                        </span>
+                        <span className="text-muted-foreground">
+                          {DATASET_LABELS[job.target_table] ?? job.target_table}
+                        </span>
+                        <StatusBadge status={job.status} />
+                      </div>
+                      <p className="mt-0.5 text-muted-foreground">
+                        {job.rows_imported.toLocaleString()} imported
+                        {job.rows_failed > 0 && (
+                          <> · <span className="text-amber-700">{job.rows_failed.toLocaleString()} skipped</span></>
+                        )}
+                        {' '}of {job.rows_total.toLocaleString()} rows
+                      </p>
+                      {job.error_log?.errors && job.error_log.errors.length > 0 && (
+                        <div className="mt-1 p-2 bg-red-50 border border-red-100 rounded text-red-700">
+                          {job.error_log.errors.slice(0, 2).map((e, j) => <p key={j}>{e}</p>)}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              // Single-sheet detail
+              <div className="text-xs space-y-1 text-muted-foreground">
+                <p>
+                  <span className="font-medium text-foreground">Dataset type:</span>{' '}
+                  {DATASET_LABELS[jobs[0].target_table] ?? jobs[0].target_table}
+                </p>
+                <p>
+                  <span className="font-medium text-foreground">Total rows in file:</span>{' '}
+                  {jobs[0].rows_total.toLocaleString()}
+                </p>
+                <p>
+                  <span className="font-medium text-foreground">Rows imported successfully:</span>{' '}
+                  <span className="text-green-700">{jobs[0].rows_imported.toLocaleString()}</span>
+                </p>
+                {jobs[0].rows_failed > 0 && (
+                  <p>
+                    <span className="font-medium text-foreground">Rows skipped:</span>{' '}
+                    <span className="text-amber-700">{jobs[0].rows_failed.toLocaleString()}</span>
+                  </p>
+                )}
+                {jobs[0].error_log?.errors && jobs[0].error_log.errors.length > 0 && (
+                  <div className="mt-2 p-2 bg-red-50 border border-red-100 rounded text-red-700">
+                    <p className="font-medium mb-1">Import errors:</p>
+                    <ul className="space-y-0.5 list-disc list-inside">
+                      {jobs[0].error_log.errors.slice(0, 3).map((e, i) => (
+                        <li key={i}>{e}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
+            )}
           </td>
         </tr>
       )}
@@ -287,18 +332,22 @@ export function UploadsTable({ initialRows }: { initialRows: UploadRow[] }) {
     }
     setRows((prev) => prev.filter((r) => r.id !== id))
     setToast({ message: 'File deleted — all imported rows from this file have been removed.', type: 'success' })
-    router.refresh() // revalidate server data so dashboard reflects deletion
+    router.refresh()
   }
 
+  // Collect unique table types across all jobs of all uploads
+  const uniqueTypes = Array.from(
+    new Set(rows.flatMap((r) => r.import_jobs.map((j) => j.target_table)))
+  )
+
   const filtered = rows.filter((r) => {
-    const table = r.import_jobs?.target_table ?? ''
-    const status = r.import_jobs?.status ?? r.status
-    if (typeFilter !== 'all' && table !== typeFilter) return false
-    if (statusFilter !== 'all' && status !== statusFilter) return false
+    const tables = r.import_jobs.map((j) => j.target_table)
+    const statuses = r.import_jobs.map((j) => j.status)
+    const uploadStatus = r.status
+    if (typeFilter !== 'all' && !tables.includes(typeFilter)) return false
+    if (statusFilter !== 'all' && !statuses.includes(statusFilter) && uploadStatus !== statusFilter) return false
     return true
   })
-
-  const uniqueTypes = Array.from(new Set(rows.map((r) => r.import_jobs?.target_table).filter(Boolean))) as string[]
 
   return (
     <div>
@@ -376,25 +425,25 @@ export function UploadsTable({ initialRows }: { initialRows: UploadRow[] }) {
       {filtered.length > 0 && (
         <div className="rounded-xl border overflow-hidden">
           <div className="overflow-x-auto">
-          <table className="min-w-full">
-            <thead className="bg-muted/30 border-b border-border">
-              <tr>
-                <th className="w-8 pl-4" />
-                <th className="py-3 pr-4 text-left text-[11px] font-medium uppercase tracking-wider text-muted-foreground">File name</th>
-                <th className="py-3 pr-4 text-left text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Data type</th>
-                <th className="py-3 pr-4 text-left text-[11px] font-medium uppercase tracking-wider text-muted-foreground whitespace-nowrap">Uploaded</th>
-                <th className="py-3 pr-4 text-left text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Status</th>
-                <th className="py-3 pr-4 text-right text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Rows</th>
-                <th className="py-3 pr-4 text-right text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Size</th>
-                <th className="py-3 pr-4 text-right text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="bg-card">
-              {filtered.map((row) => (
-                <UploadRow key={row.id} row={row} onDeleted={handleDeleted} />
-              ))}
-            </tbody>
-          </table>
+            <table className="min-w-full">
+              <thead className="bg-muted/30 border-b border-border">
+                <tr>
+                  <th className="w-8 pl-4" />
+                  <th className="py-3 pr-4 text-left text-[11px] font-medium uppercase tracking-wider text-muted-foreground">File name</th>
+                  <th className="py-3 pr-4 text-left text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Data type</th>
+                  <th className="py-3 pr-4 text-left text-[11px] font-medium uppercase tracking-wider text-muted-foreground whitespace-nowrap">Uploaded</th>
+                  <th className="py-3 pr-4 text-left text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Status</th>
+                  <th className="py-3 pr-4 text-right text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Rows</th>
+                  <th className="py-3 pr-4 text-right text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Size</th>
+                  <th className="py-3 pr-4 text-right text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="bg-card">
+                {filtered.map((row) => (
+                  <UploadRow key={row.id} row={row} onDeleted={handleDeleted} />
+                ))}
+              </tbody>
+            </table>
           </div>
         </div>
       )}

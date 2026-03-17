@@ -22,7 +22,7 @@ export default async function UploadsPage() {
 
   if (!membership) redirect('/onboarding')
 
-  // Fetch uploads joined with their import job (one-to-one via upload_id)
+  // Fetch uploads with all their import jobs (one-to-many for multi-sheet workbooks)
   const { data: uploads } = await supabase
     .from('uploads')
     .select(`
@@ -34,6 +34,7 @@ export default async function UploadsPage() {
       created_at,
       import_jobs (
         target_table,
+        sheet_name,
         rows_total,
         rows_imported,
         rows_failed,
@@ -44,12 +45,9 @@ export default async function UploadsPage() {
     .eq('organization_id', membership.organization_id)
     .order('created_at', { ascending: false })
 
-  // Each upload has at most one import_job — unwrap the array Supabase returns
   const rows: UploadRow[] = (uploads ?? []).map((u) => ({
     ...u,
-    import_jobs: Array.isArray(u.import_jobs)
-      ? (u.import_jobs[0] ?? null)
-      : (u.import_jobs ?? null),
+    import_jobs: (Array.isArray(u.import_jobs) ? u.import_jobs : []) as UploadRow['import_jobs'],
   }))
 
   return (

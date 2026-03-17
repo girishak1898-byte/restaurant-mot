@@ -138,6 +138,7 @@ export type Database = {
           organization_id: string
           upload_id: string
           target_table: string
+          sheet_name: string | null
           rows_total: number
           rows_imported: number
           rows_failed: number
@@ -151,6 +152,7 @@ export type Database = {
           organization_id: string
           upload_id: string
           target_table: string
+          sheet_name?: string | null
           rows_total?: number
           rows_imported?: number
           rows_failed?: number
