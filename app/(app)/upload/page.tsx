@@ -1279,10 +1279,17 @@ export default function UploadPage() {
         const type = sheet.suggestedType!
         const m = sheetMappings[sheet.name] ?? {}
         const v = validateRows(sheet.parsed.rows, m, type)
-        const validRows = sheet.parsed.rows.filter((_, i) => {
-          const rowNum = i + 2
-          return !v.errors.some((e) => e.row === rowNum)
-        })
+        const validRows = sheet.parsed.rows.filter((_, i) => !v.invalidRowNums.has(i + 2))
+
+        // If every row failed validation, skip the server call entirely and show a clear error.
+        if (validRows.length === 0 && sheet.parsed.totalRows > 0) {
+          const unmapped = DATASET_FIELDS[type].filter((f) => f.required && !m[f.key]).map((f) => f.label)
+          const reason = unmapped.length > 0
+            ? `Required field${unmapped.length > 1 ? 's' : ''} not mapped: ${unmapped.join(', ')}.`
+            : `All ${sheet.parsed.totalRows} rows failed validation. Check that date and number values are in a recognised format.`
+          results.push({ name: sheet.name, datasetType: type, imported: 0, failed: sheet.parsed.totalRows, error: reason })
+          continue
+        }
 
         try {
           const res = await saveUpload({
@@ -1359,10 +1366,7 @@ export default function UploadPage() {
     setError(null)
 
     const fileType = getFileType(file)!
-    const validRows = parsed.rows.filter((_, i) => {
-      const rowNum = i + 2
-      return !validation.errors.some((e) => e.row === rowNum)
-    })
+    const validRows = parsed.rows.filter((_, i) => !validation.invalidRowNums.has(i + 2))
 
     const res = await saveUpload({
       fileName: file.name,

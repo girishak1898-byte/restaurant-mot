@@ -48,17 +48,18 @@ function coerceRow(
         break
       }
       case 'date': {
-        // Normalise DD/MM/YYYY and DD-MM-YYYY (UK/EU format) → YYYY-MM-DD before parsing.
-        // JS Date constructor doesn't recognise DD/MM/YYYY; it misreads or rejects it.
-        let normalised = raw
-        const parts = raw.match(/^(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{2,4})$/)
-        if (parts) {
-          const [, d, m, y] = parts
-          const year = y.length === 2 ? (parseInt(y) >= 50 ? `19${y}` : `20${y}`) : y
-          normalised = `${year}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`
+        // Try native Date parsing first (handles ISO, US M/D/YYYY, and many other formats).
+        // If that fails, try DD/MM/YYYY (UK/EU) → YYYY-MM-DD conversion.
+        let parsed = new Date(raw)
+        if (isNaN(parsed.getTime())) {
+          const parts = raw.match(/^(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{2,4})$/)
+          if (parts) {
+            const [, dd, mm, y] = parts
+            const year = y.length === 2 ? (parseInt(y) >= 50 ? `19${y}` : `20${y}`) : y
+            parsed = new Date(`${year}-${mm.padStart(2, '0')}-${dd.padStart(2, '0')}`)
+          }
         }
-        const d = new Date(normalised)
-        if (!isNaN(d.getTime())) result[field.key] = d.toISOString().split('T')[0]
+        if (!isNaN(parsed.getTime())) result[field.key] = parsed.toISOString().split('T')[0]
         break
       }
       default:
@@ -207,11 +208,21 @@ export async function saveUpload(params: {
     }
 
     // ── Coerce rows and insert in batches ─────────────────────────────────────
+    console.log('[saveUpload] mapping for', targetTable, ':', JSON.stringify(mapping))
+    if (rows.length > 0) {
+      const sampleKeys = Object.keys(rows[0])
+      console.log('[saveUpload] sheet headers:', JSON.stringify(sampleKeys))
+    }
+
     const coercedRows = rows.map((row) => ({
       ...coerceRow(row, mapping, targetTable),
       organization_id: orgId,
       source_upload_id: uploadId,
     }))
+
+    if (coercedRows.length > 0) {
+      console.log('[saveUpload] first coerced row:', JSON.stringify(coercedRows[0]))
+    }
 
     let imported = 0
     let failed = 0

@@ -9,20 +9,22 @@ export interface ValidationResult {
   validCount: number
   invalidCount: number
   errors: RowError[]   // capped at 50 for display
+  /** Every invalid row number — use this for filtering, NOT errors (which is capped). */
+  invalidRowNums: Set<number>
   isValid: boolean
 }
 
 function isValidDate(value: string): boolean {
-  // Normalise DD/MM/YYYY and DD-MM-YYYY (UK/EU) → YYYY-MM-DD before parsing,
-  // matching the server-side coerceRow behaviour.
-  let normalised = value
+  // Try native parsing first (ISO, US M/D/YYYY, etc.).
+  // If that fails, try DD/MM/YYYY (UK/EU) → YYYY-MM-DD, matching server-side coerceRow.
+  if (!isNaN(new Date(value).getTime())) return true
   const parts = value.match(/^(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{2,4})$/)
   if (parts) {
-    const [, d, m, y] = parts
+    const [, dd, mm, y] = parts
     const year = y.length === 2 ? (parseInt(y) >= 50 ? `19${y}` : `20${y}`) : y
-    normalised = `${year}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`
+    return !isNaN(new Date(`${year}-${mm.padStart(2, '0')}-${dd.padStart(2, '0')}`).getTime())
   }
-  return !isNaN(new Date(normalised).getTime())
+  return false
 }
 
 function isValidNumber(value: string): boolean {
@@ -66,10 +68,13 @@ export function validateRows(
     }
   })
 
+  const invalidRowNums = new Set(allErrors.map((e) => e.row))
+
   return {
     validCount: rows.length - allErrors.length,
     invalidCount: allErrors.length,
     errors: allErrors.slice(0, 50),   // show at most 50 in the UI
+    invalidRowNums,
     isValid: allErrors.length === 0,
   }
 }
