@@ -248,7 +248,7 @@ export async function saveUpload(params: {
     const finalStatus = allFailed ? 'error' : 'done'
 
     // ── Update records ────────────────────────────────────────────────────────
-    await Promise.all([
+    const updateResults = await Promise.all([
       ...(!existingUploadId
         ? [supabase.from('uploads').update({ status: finalStatus }).eq('id', uploadId)]
         : []),
@@ -259,6 +259,10 @@ export async function saveUpload(params: {
         error_log: errorMessages.length ? { errors: errorMessages } : null,
       }).eq('id', job.id),
     ])
+
+    for (const r of updateResults) {
+      if (r.error) console.error('[saveUpload] status update error:', r.error)
+    }
 
     if (allFailed) {
       return {

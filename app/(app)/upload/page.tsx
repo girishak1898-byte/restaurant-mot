@@ -1193,6 +1193,7 @@ export default function UploadPage() {
       setMapping({})
       setValidation(null)
       setSheetQueue([])
+      setWorkbookSheets(null)
       setStep('preview')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to read file.')
@@ -1276,7 +1277,11 @@ export default function UploadPage() {
 
       // Step 2: Import each sheet independently — one failure never blocks the rest.
       for (const sheet of sheetQueue) {
-        const type = sheet.suggestedType!
+        if (!sheet.suggestedType) {
+          results.push({ name: sheet.name, datasetType: 'restaurant_sales', imported: 0, failed: sheet.parsed.totalRows, error: 'No dataset type detected for this sheet.' })
+          continue
+        }
+        const type = sheet.suggestedType
         const m = sheetMappings[sheet.name] ?? {}
         const v = validateRows(sheet.parsed.rows, m, type)
         const validRows = sheet.parsed.rows.filter((_, i) => !v.invalidRowNums.has(i + 2))
@@ -1365,22 +1370,35 @@ export default function UploadPage() {
     setImporting(true)
     setError(null)
 
-    const fileType = getFileType(file)!
-    const validRows = parsed.rows.filter((_, i) => !validation.invalidRowNums.has(i + 2))
+    try {
+      const fileType = getFileType(file)!
+      const validRows = parsed.rows.filter((_, i) => !validation.invalidRowNums.has(i + 2))
 
-    const res = await saveUpload({
-      fileName: file.name,
-      fileType,
-      fileSizeBytes: file.size,
-      targetTable: datasetType,
-      mapping,
-      rows: validRows,
-    })
+      const res = await saveUpload({
+        fileName: file.name,
+        fileType,
+        fileSizeBytes: file.size,
+        targetTable: datasetType,
+        mapping,
+        rows: validRows,
+        rowsTotal: parsed.totalRows,
+      })
 
-    setImporting(false)
-    if (res.error) { setError(res.error); return }
-    setSingleResult({ imported: res.imported ?? 0, failed: res.failed ?? 0 })
-    setStep('done')
+      if (res.error) { setError(res.error); return }
+      setSingleResult({ imported: res.imported ?? 0, failed: res.failed ?? 0 })
+      setStep('done')
+    } catch (err) {
+      if (isClientNavigationError(err)) throw err
+      console.error('[single-sheet] import failed:', err)
+      const message = err instanceof Error ? err.message : 'Import failed. Please try again.'
+      setError(
+        message === 'An unexpected response was received from the server.'
+          ? 'The file may be too large or a temporary server error occurred. Please try again or use a smaller file.'
+          : message
+      )
+    } finally {
+      setImporting(false)
+    }
   }
 
   function handleReset() {
@@ -1448,7 +1466,7 @@ export default function UploadPage() {
           <SheetsStep
             fileName={file.name}
             sheets={workbookSheets}
-            onBack={() => setStep('drop')}
+            onBack={() => { setError(null); setStep('drop') }}
             onContinue={handleSheetsContinue}
           />
         )}
@@ -1470,7 +1488,7 @@ export default function UploadPage() {
             allSheets={workbookSheets}
             importing={importing}
             error={error}
-            onBack={() => { setCurrentSheetIdx(sheetQueue.length - 1); setStep('multi-map') }}
+            onBack={() => { setError(null); setCurrentSheetIdx(sheetQueue.length - 1); setStep('multi-map') }}
             onImport={handleMultiImport}
           />
         )}
@@ -1481,8 +1499,8 @@ export default function UploadPage() {
             parsed={parsed}
             datasetType={datasetType}
             onDatasetType={handleDatasetType}
-            onBack={() => workbookSheets ? setStep('sheets') : setStep('drop')}
-            onNext={() => setStep('mapping')}
+            onBack={() => { setError(null); workbookSheets ? setStep('sheets') : setStep('drop') }}
+            onNext={() => { setError(null); setStep('mapping') }}
           />
         )}
 
@@ -1492,7 +1510,7 @@ export default function UploadPage() {
             datasetType={datasetType}
             mapping={mapping}
             onMapping={setMapping}
-            onBack={() => setStep('preview')}
+            onBack={() => { setError(null); setStep('preview') }}
             onNext={handleGoToConfirm}
           />
         )}
@@ -1504,7 +1522,7 @@ export default function UploadPage() {
             validation={validation}
             importing={importing}
             error={error}
-            onBack={() => setStep('mapping')}
+            onBack={() => { setError(null); setStep('mapping') }}
             onImport={handleImport}
           />
         )}
